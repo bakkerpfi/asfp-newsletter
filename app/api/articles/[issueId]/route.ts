@@ -3,14 +3,16 @@ import db from "@/lib/database";
 
 export async function GET(
   request: Request,
-  { params }: { params: { issueId: string } }
+  { params }: { params: Promise<{ issueId: string }> }
 ) {
+  const { issueId } = await params;
+
   const articles = db.prepare(`
     SELECT *
     FROM articles
     WHERE issue_id = ?
     ORDER BY id
-  `).all(params.issueId);
+  `).all(Number(issueId));
 
   return NextResponse.json(articles);
 }
