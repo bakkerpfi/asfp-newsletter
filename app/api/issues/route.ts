@@ -3,23 +3,17 @@ import db from "@/lib/database";
 
 export async function GET() {
   try {
-    const issues = db.prepare(`
-      SELECT *
-      FROM issues
+    const tables = db.prepare(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type='table'
     `).all();
 
-    return NextResponse.json(issues);
-
+    return NextResponse.json(tables);
   } catch (error) {
-    console.error(error);
-
     return NextResponse.json(
-      {
-        error: String(error),
-      },
-      {
-        status: 500,
-      }
+      { error: String(error) },
+      { status: 500 }
     );
   }
 }
