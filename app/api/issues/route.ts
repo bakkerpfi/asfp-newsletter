@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 import db from "@/lib/database";
 
 export async function GET() {
-  const issue = db.prepare(`
-    PRAGMA table_info(issues)
-  `).all();
+  const row = db.prepare(`
+    SELECT rowid, *
+    FROM issues
+    LIMIT 1
+  `).get();
 
-  return NextResponse.json(issue);
+  return NextResponse.json({
+    keys: Object.keys(row || {}),
+    row,
+  });
 }
