@@ -2,18 +2,24 @@ import { NextResponse } from "next/server";
 import db from "@/lib/database";
 
 export async function GET() {
-  try {
-    const tables = db.prepare(`
-      SELECT name
-      FROM sqlite_master
-      WHERE type='table'
-    `).all();
+  const issues = db.prepare(`
+    SELECT *
+    FROM issues
+  `).all();
 
-    return NextResponse.json(tables);
-  } catch (error) {
-    return NextResponse.json(
-      { error: String(error) },
-      { status: 500 }
-    );
-  }
+  const articles = db.prepare(`
+    SELECT *
+    FROM articles
+  `).all();
+
+  const polls = db.prepare(`
+    SELECT *
+    FROM polls
+  `).all();
+
+  return NextResponse.json({
+    issues,
+    articles,
+    polls,
+  });
 }
