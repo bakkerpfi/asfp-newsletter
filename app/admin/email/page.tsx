@@ -3,6 +3,9 @@ import CopyBccButton from "@/components/CopyBccButton";
 import CopyLinkButton from "@/components/CopyLinkButton";
 import db from "@/lib/database";
 
+const WEBSITE_URL =
+  "https://asfp-newsletter.vercel.app";
+
 export default function EmailPage() {
   const latestIssue = db.prepare(`
     SELECT *
@@ -25,9 +28,9 @@ export default function EmailPage() {
     .prepare("SELECT COUNT(*) AS count FROM subscribers")
     .get() as { count: number };
 
-  const newsletterUrl = latestIssue
-    ? `http://localhost:3000/newsletter/${latestIssue.id}`
-    : "";
+const newsletterUrl = latestIssue
+  ? `${WEBSITE_URL}/newsletter/${latestIssue.id}`
+  : "";
 
   const emailSubject =
     latestIssue
