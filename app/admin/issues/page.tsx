@@ -19,7 +19,7 @@ export default function IssuesPage() {
   }
 
   async function saveIssue() {
-    await fetch("/api/issues", {
+    const response = await fetch("/api/issues", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -33,6 +33,16 @@ export default function IssuesPage() {
       }),
     });
 
+    if (!response.ok) {
+      alert("Unable to save issue.");
+      return;
+    }
+
+    setTitle("");
+    setIssueNumber("");
+    setMonth("");
+    setSummary("");
+
     loadIssues();
   }
 
@@ -44,63 +54,67 @@ export default function IssuesPage() {
     <div className="flex">
       <AdminSidebar />
 
-      <main className="flex-1 p-10 bg-slate-100">
-
+      <main className="flex-1 bg-slate-100 p-10">
         <h1 className="text-4xl font-bold text-[#1E2D5A]">
           Newsletter Issues
         </h1>
 
         <div className="mt-8 rounded-xl bg-white p-8 shadow">
-
           <div className="grid gap-4">
-
             <input
-              className="border rounded p-3"
+              className="rounded border p-3"
               placeholder="Title"
+              value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
 
             <input
-              className="border rounded p-3"
+              className="rounded border p-3"
               placeholder="Issue Number"
+              value={issueNumber}
               onChange={(e) => setIssueNumber(e.target.value)}
             />
 
             <input
-              className="border rounded p-3"
+              className="rounded border p-3"
               placeholder="Month"
+              value={month}
               onChange={(e) => setMonth(e.target.value)}
             />
 
             <input
-              className="border rounded p-3"
+              className="rounded border p-3"
               placeholder="Year"
               value={year}
               onChange={(e) => setYear(e.target.value)}
             />
 
             <textarea
-              className="border rounded p-3"
+              className="rounded border p-3"
               placeholder="Summary"
+              value={summary}
               onChange={(e) => setSummary(e.target.value)}
             />
 
             <button
               onClick={saveIssue}
-              className="rounded bg-red-500 px-6 py-3 text-white"
+              className="rounded bg-red-500 px-6 py-3 text-white hover:bg-red-600"
             >
               Create Issue
             </button>
-
           </div>
-
         </div>
 
         <div className="mt-8 rounded-xl bg-white p-8 shadow">
-
           <h2 className="mb-4 text-2xl font-bold">
             Existing Issues
           </h2>
+
+          {issues.length === 0 && (
+            <p className="text-slate-500">
+              No issues found.
+            </p>
+          )}
 
           {issues.map((issue) => (
             <div
@@ -118,37 +132,36 @@ export default function IssuesPage() {
               <p>
                 {issue.month} {issue.year}
               </p>
+
               <button
-  onClick={async () => {
-    if (
-      !confirm(
-        "Delete this issue and all associated articles and polls?"
-      )
-    ) {
-      return;
-    }
+                onClick={async () => {
+                  if (
+                    !confirm(
+                      "Delete this issue and all associated articles and polls?"
+                    )
+                  ) {
+                    return;
+                  }
 
-    await fetch("/api/issues/delete", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        id: issue.id,
-      }),
-    });
+                  await fetch("/api/issues/delete", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      id: issue.id,
+                    }),
+                  });
 
-    window.location.reload();
-  }}
-  className="mt-4 rounded bg-red-500 px-4 py-2 text-white hover:bg-red-600"
->
-  Delete Issue
-</button>
+                  loadIssues();
+                }}
+                className="mt-4 rounded bg-red-500 px-4 py-2 text-white hover:bg-red-600"
+              >
+                Delete Issue
+              </button>
             </div>
           ))}
-
         </div>
-
       </main>
     </div>
   );
