@@ -25,7 +25,7 @@ export default function PollsPage() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        issue_id: 1,
+        issue_id: 4,
         question,
         option1,
         option2,
