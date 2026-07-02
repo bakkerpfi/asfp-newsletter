@@ -158,7 +158,31 @@ const polls = db.prepare(`
         key={index}
         className="mb-6"
       >
-        {paragraph}
+        {paragraph.split(" ").map((word, i) => {
+          if (
+            word.startsWith("www.") ||
+            word.startsWith("http://") ||
+            word.startsWith("https://")
+          ) {
+            const url = word.startsWith("www.")
+              ? `https://${word}`
+              : word;
+
+            return (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 underline"
+              >
+                {word}{" "}
+              </a>
+            );
+          }
+
+          return word + " ";
+        })}
       </p>
     ))}
 </div>
