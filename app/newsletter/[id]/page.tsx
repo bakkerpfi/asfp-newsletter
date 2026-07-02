@@ -150,9 +150,18 @@ const polls = db.prepare(`
                 {article.title}
               </h2>
 
-              <div className="mt-6 whitespace-pre-wrap text-lg leading-8 text-[#334155]">
-                {article.content}
-              </div>
+<div className="mt-6 text-lg leading-8 text-[#334155]">
+  {article.content
+    .split("\n\n")
+    .map((paragraph: string, index: number) => (
+      <p
+        key={index}
+        className="mb-6"
+      >
+        {paragraph}
+      </p>
+    ))}
+</div>
 
               <div className="mt-8 border-t pt-4 text-sm text-[#64748B]">
                 Author: {article.author}

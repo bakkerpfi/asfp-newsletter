@@ -12,6 +12,7 @@ export default function ArticlesPage() {
 const [issues, setIssues] = useState<any[]>([]);
 
   const [articles, setArticles] = useState<any[]>([]);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   async function loadIssues() {
   const response = await fetch("/api/issues");
@@ -31,39 +32,34 @@ const [issues, setIssues] = useState<any[]>([]);
     setArticles(data);
   }
 
-  async function saveArticle() {
-    await fetch("/api/articles", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-body: JSON.stringify({
-  issue_id: Number(issueId),
-  title,
-  category,
-  author,
-  content,
-}),
-    });
+async function saveArticle() {
+  const url = editingId
+    ? "/api/articles/update"
+    : "/api/articles";
 
-    setTitle("");
-    setCategory("");
-    setAuthor("");
-    setContent("");
+  await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id: editingId,
+      issue_id: Number(issueId),
+      title,
+      category,
+      author,
+      content,
+    }),
+  });
 
-    async function loadIssues() {
-  const response = await fetch("/api/issues");
-  const data = await response.json();
+  setTitle("");
+  setCategory("");
+  setAuthor("");
+  setContent("");
+  setEditingId(null);
 
-  setIssues(data);
-
-  if (data.length > 0) {
-    setIssueId(String(data[0].id));
-  }
+  loadArticles();
 }
-
-    loadArticles();
-  }
 
 useEffect(() => {
   loadArticles();
@@ -127,12 +123,14 @@ useEffect(() => {
     onChange={(e) => setContent(e.target.value)}
   />
 
-            <button
-              onClick={saveArticle}
-              className="rounded bg-red-500 px-6 py-3 text-white"
-            >
-              Save Article
-            </button>
+<button
+  onClick={saveArticle}
+  className="rounded bg-red-500 px-6 py-3 text-white"
+>
+  {editingId
+    ? "Update Article"
+    : "Save Article"}
+</button>
 
           </div>
 
@@ -160,6 +158,26 @@ useEffect(() => {
               <p className="mt-2">
                 {article.content}
               </p>
+
+<button
+  onClick={() => {
+    setEditingId(article.id);
+    setIssueId(String(article.issue_id));
+    setTitle(article.title);
+    setCategory(article.category);
+    setAuthor(article.author);
+    setContent(article.content);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }}
+  className="mr-2 mt-3 rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+>
+  Edit
+</button>
+
               <button
   onClick={async () => {
     await fetch("/api/articles/delete", {
