@@ -154,34 +154,38 @@ const polls = db.prepare(`
   {article.content
     .split("\n\n")
     .map((paragraph: string, index: number) => (
-      <p
-        key={index}
-        className="mb-6"
-      >
-        {paragraph.split(" ").map((word, i) => {
-          if (
-            word.startsWith("www.") ||
-            word.startsWith("http://") ||
-            word.startsWith("https://")
-          ) {
-            const url = word.startsWith("www.")
-              ? `https://${word}`
-              : word;
+      <p key={index} className="mb-6">
+        {paragraph.split(/(\s+)/).map((part: string, i: number) => {
+          const cleanPart = part.replace(/[().,]+$/g, "");
 
-            return (
+          const isLink =
+            cleanPart.startsWith("www.") ||
+            cleanPart.startsWith("http://") ||
+            cleanPart.startsWith("https://");
+
+          if (!isLink) {
+            return part;
+          }
+
+          const url = cleanPart.startsWith("www.")
+            ? `https://${cleanPart}`
+            : cleanPart;
+
+          const trailing = part.replace(cleanPart, "");
+
+          return (
+            <span key={i}>
               <a
-                key={i}
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 underline"
               >
-                {word}{" "}
+                {cleanPart}
               </a>
-            );
-          }
-
-          return word + " ";
+              {trailing}
+            </span>
+          );
         })}
       </p>
     ))}
