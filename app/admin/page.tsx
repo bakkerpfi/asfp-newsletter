@@ -28,6 +28,7 @@ const articleCount = articles?.length ?? 0;
 const pollCount = polls?.length ?? 0;
 
 const latestIssue = issues?.[0] ?? null;
+console.log("LATEST ISSUE:", latestIssue);
 const recentArticles = articles?.slice(0, 5) ?? [];
   
 
