@@ -1,28 +1,86 @@
 import { NextResponse } from "next/server";
-import db from "@/lib/database";
+import { supabase } from "@/lib/supabase";
 
 export async function GET() {
-  const sponsors = db
-    .prepare("SELECT * FROM sponsors ORDER BY name")
-    .all();
+  try {
+    const { data, error } = await supabase
+      .from("sponsors")
+      .select("*")
+      .order("name", { ascending: true });
 
-  return NextResponse.json(sponsors);
+    if (error) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message,
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    return NextResponse.json(data ?? []);
+
+  } catch (error) {
+    console.error("GET SPONSORS ERROR:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: String(error),
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }
 
 export async function POST(request: Request) {
-  const body = await request.json();
+  try {
+    const body = await request.json();
 
-  db.prepare(`
-    INSERT INTO sponsors
-    (name, website, logo)
-    VALUES (?, ?, ?)
-  `).run(
-    body.name,
-    body.website,
-    body.logo
-  );
+    const { data, error } = await supabase
+      .from("sponsors")
+      .insert([
+        {
+          name: body.name,
+          website: body.website,
+          logo: body.logo,
+        },
+      ])
+      .select()
+      .single();
 
-  return NextResponse.json({
-    success: true,
-  });
+    if (error) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message,
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      id: data.id,
+    });
+
+  } catch (error) {
+    console.error("POST SPONSOR ERROR:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: String(error),
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }

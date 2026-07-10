@@ -16,26 +16,35 @@ export default function SubscribersPage() {
     setSubscribers(data);
   }
 
-  async function saveSubscriber() {
-    await fetch("/api/subscribers", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name,
-        company,
-        email,
-        member_type: "Member",
-      }),
-    });
+async function saveSubscriber() {
+  const response = await fetch("/api/subscribers", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name,
+      company,
+      email,
+      member_type: "Member",
+    }),
+  });
 
-    setName("");
-    setCompany("");
-    setEmail("");
+  const result = await response.json();
 
-    loadSubscribers();
+  if (!result.success) {
+    alert(result.error);
+    return;
   }
+
+  alert("Subscriber added successfully.");
+
+  setName("");
+  setCompany("");
+  setEmail("");
+
+  loadSubscribers();
+}
 
   useEffect(() => {
     loadSubscribers();

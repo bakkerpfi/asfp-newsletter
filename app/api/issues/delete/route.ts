@@ -1,27 +1,51 @@
 import { NextResponse } from "next/server";
-import db from "@/lib/database";
+import { supabase } from "@/lib/supabase";
 
 export async function POST(request: Request) {
-  const body = await request.json();
+  try {
+    const body = await request.json();
 
-  const issueId = body.id;
+    const issueId = body.id;
 
-  db.prepare(`
-    DELETE FROM articles
-    WHERE issue_id = ?
-  `).run(issueId);
+    // Delete articles
+    const { error: articlesError } = await supabase
+      .from("articles")
+      .delete()
+      .eq("issue_id", issueId);
 
-  db.prepare(`
-    DELETE FROM polls
-    WHERE issue_id = ?
-  `).run(issueId);
+    if (articlesError) throw articlesError;
 
-  db.prepare(`
-    DELETE FROM issues
-    WHERE id = ?
-  `).run(issueId);
+    // Delete polls
+    const { error: pollsError } = await supabase
+      .from("polls")
+      .delete()
+      .eq("issue_id", issueId);
 
-  return NextResponse.json({
-    success: true,
-  });
+    if (pollsError) throw pollsError;
+
+    // Delete issue
+    const { error: issueError } = await supabase
+      .from("issues")
+      .delete()
+      .eq("id", issueId);
+
+    if (issueError) throw issueError;
+
+    return NextResponse.json({
+      success: true,
+    });
+
+  } catch (error) {
+    console.error("DELETE ISSUE ERROR:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: String(error),
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }

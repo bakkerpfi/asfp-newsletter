@@ -1,15 +1,44 @@
 import { NextResponse } from "next/server";
-import db from "@/lib/database";
+import { supabase } from "@/lib/supabase";
 
 export async function POST(request: Request) {
-  const body = await request.json();
+  try {
+    const body = await request.json();
 
-  db.prepare(`
-    DELETE FROM subscribers
-    WHERE id = ?
-  `).run(body.id);
+    const { error } = await supabase
+      .from("subscribers")
+      .delete()
+      .eq("id", body.id);
 
-  return NextResponse.json({
-    success: true,
-  });
+    if (error) {
+      console.error("DELETE SUBSCRIBER ERROR:", error);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message,
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+    });
+
+  } catch (error) {
+    console.error("DELETE SUBSCRIBER ERROR:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: String(error),
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }

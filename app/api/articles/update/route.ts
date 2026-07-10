@@ -1,28 +1,50 @@
 import { NextResponse } from "next/server";
-import db from "@/lib/database";
+import { supabase } from "@/lib/supabase";
 
 export async function POST(request: Request) {
-  const body = await request.json();
+  try {
+    const body = await request.json();
 
-  db.prepare(`
-    UPDATE articles
-    SET
-      issue_id = ?,
-      title = ?,
-      category = ?,
-      author = ?,
-      content = ?
-    WHERE id = ?
-  `).run(
-    body.issue_id,
-    body.title,
-    body.category,
-    body.author,
-    body.content,
-    body.id
-  );
+    const { error } = await supabase
+      .from("articles")
+      .update({
+        issue_id: body.issue_id,
+        title: body.title,
+        category: body.category,
+        author: body.author,
+        content: body.content,
+      })
+      .eq("id", body.id);
 
-  return NextResponse.json({
-    success: true,
-  });
+    if (error) {
+      console.error("UPDATE ARTICLE ERROR:", error);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message,
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+    });
+
+  } catch (error) {
+    console.error("POST UPDATE ERROR:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: String(error),
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }

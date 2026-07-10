@@ -1,39 +1,77 @@
 import { NextResponse } from "next/server";
-import db from "@/lib/database";
-import { initializeDatabase } from "@/lib/init-db";
-
-initializeDatabase();
+import { supabase } from "@/lib/supabase";
 
 export async function GET() {
-  const polls = db
-    .prepare("SELECT * FROM polls ORDER BY id DESC")
-    .all();
+  try {
+    const { data, error } = await supabase
+      .from("polls")
+      .select("*")
+      .order("id", { ascending: false });
 
-  return NextResponse.json(polls);
+    if (error) {
+      console.error("GET POLLS ERROR:", error);
+
+      return NextResponse.json(error, {
+        status: 500,
+      });
+    }
+
+    return NextResponse.json(data);
+
+  } catch (error) {
+    console.error("GET POLLS ERROR:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: String(error),
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }
 
 export async function POST(request: Request) {
-  const body = await request.json();
+  try {
+    const body = await request.json();
 
-  db.prepare(`
-    INSERT INTO polls
-    (
-      issue_id,
-      question,
-      option1,
-      option2,
-      option3
-    )
-    VALUES (?, ?, ?, ?, ?)
-  `).run(
-    body.issue_id,
-    body.question,
-    body.option1,
-    body.option2,
-    body.option3
-  );
+    const { data, error } = await supabase
+      .from("polls")
+      .insert([
+        {
+          issue_id: body.issue_id,
+          question: body.question,
+          option1: body.option1,
+          option2: body.option2,
+          option3: body.option3,
+        },
+      ])
+      .select()
+      .single();
 
-  return NextResponse.json({
-    success: true,
-  });
+    if (error) {
+      console.error("INSERT POLL ERROR:", error);
+      throw error;
+    }
+
+    return NextResponse.json({
+      success: true,
+      id: data.id,
+    });
+
+  } catch (error) {
+    console.error("POST POLL ERROR:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: String(error),
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }

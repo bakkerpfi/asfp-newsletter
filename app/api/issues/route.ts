@@ -1,44 +1,67 @@
 import { NextResponse } from "next/server";
-import db from "@/lib/database";
+import { supabase } from "@/lib/supabase";
 
 export async function GET() {
-  const issues = db.prepare(`
-    SELECT *
-    FROM issues
-    ORDER BY id DESC
-  `).all();
+  try {
+    const { data, error } = await supabase
+      .from("issues")
+      .select("*")
+      .order("id", { ascending: false });
 
-  return NextResponse.json(issues);
+    console.log("GET DATA:", data);
+    console.log("GET ERROR:", error);
+
+    if (error) {
+      return NextResponse.json(error, { status: 500 });
+    }
+
+    return NextResponse.json(data);
+
+  } catch (error) {
+    console.error("GET ERROR:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: String(error),
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const result = db.prepare(`
-      INSERT INTO issues (
-        title,
-        issue_number,
-        month,
-        year,
-        summary
-      )
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
-      body.title,
-      body.issue_number,
-      body.month,
-      body.year,
-      body.summary
-    );
+    const { data, error } = await supabase
+      .from("issues")
+      .insert([
+        {
+          title: body.title,
+          issue_number: body.issue_number,
+          month: body.month,
+          year: Number(body.year),
+          summary: body.summary,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("SUPABASE INSERT ERROR:", error);
+      throw error;
+    }
 
     return NextResponse.json({
       success: true,
-      id: result.lastInsertRowid,
+      id: data.id,
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("POST ERROR:", error);
 
     return NextResponse.json(
       {

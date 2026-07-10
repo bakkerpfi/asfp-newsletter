@@ -1,4 +1,5 @@
-import db from "@/lib/database";
+import { supabase } from "@/lib/supabase";
+import { notFound } from "next/navigation";
 import DownloadPdfButton from "@/components/DownloadPdfButton";
 import PollCard from "@/components/PollCard";
 
@@ -11,24 +12,29 @@ export default async function NewsletterPage({
 
   const issueId = Number(id);
 
-  const issue = db.prepare(`
-    SELECT *
-    FROM issues
-    WHERE id = ?
-  `).get(issueId) as any;
+const { data: issue } = await supabase
+  .from("issues")
+  .select("*")
+  .eq("id", issueId)
+  .single();
 
-  const articles = db.prepare(`
-    SELECT *
-    FROM articles
-    WHERE issue_id = ?
-    ORDER BY id
-  `).all(issueId) as any[];
+const { data: articles } = await supabase
+  .from("articles")
+  .select("*")
+  .eq("issue_id", issueId)
+  .order("id", { ascending: true });
 
-const polls = db.prepare(`
-  SELECT *
-  FROM polls
-  WHERE issue_id = ?
-`).all(issueId);
+const { data: polls } = await supabase
+  .from("polls")
+  .select("*")
+  .eq("issue_id", issueId);
+
+const safeArticles = articles ?? [];
+const safePolls = polls ?? [];
+
+if (!issue) {
+  notFound();
+}
 
   return (
     <main className="min-h-screen bg-[#F1F5F9] py-10">
@@ -91,13 +97,13 @@ const polls = db.prepare(`
 
     <ul className="mt-2 space-y-1 text-[#334155]">
 
-      {articles.map((article) => (
+      {safeArticles.map((article) => (
         <li key={article.id}>
           • {article.title}
         </li>
       ))}
 
-      {polls.length > 0 && (
+      {safePolls.length > 0 && (
         <li>
           • Member Poll
         </li>
@@ -125,18 +131,18 @@ const polls = db.prepare(`
 
 </div>
 
-        {/* ARTICLES */}
+        {/* safeArticles */}
 
         <div className="p-12">
 
 
-          {articles.length === 0 && (
+          {safeArticles.length === 0 && (
             <div className="rounded-lg border p-8 text-center text-[#64748B]">
               No articles found for this issue.
             </div>
           )}
 
-          {articles.map((article) => (
+          {safeArticles.map((article) => (
             <article
               key={article.id}
               className="mb-12 border-b pb-10 last:border-b-0"
@@ -206,7 +212,7 @@ const polls = db.prepare(`
 
 {/* MEMBER POLLS */}
 
-{polls.length > 0 && (
+{safePolls.length > 0 && (
 
   <div
     id="pdf-polls"
@@ -219,7 +225,7 @@ const polls = db.prepare(`
         Member Poll
       </h2>
 
-      {polls.map((poll: any) => (
+      {safePolls.map((poll: any) => (
         <div
           key={poll.id}
           className="mb-8 last:mb-0"

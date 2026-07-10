@@ -8,7 +8,8 @@ export default function PollsPage() {
   const [option1, setOption1] = useState("");
   const [option2, setOption2] = useState("");
   const [option3, setOption3] = useState("");
-
+  const [issueId, setIssueId] = useState("");
+  const [issues, setIssues] = useState<any[]>([]);
   const [polls, setPolls] = useState<any[]>([]);
 
   async function loadPolls() {
@@ -18,19 +19,30 @@ export default function PollsPage() {
     setPolls(data);
   }
 
+async function loadIssues() {
+  const response = await fetch("/api/issues");
+  const data = await response.json();
+
+  setIssues(data);
+
+  if (data.length > 0) {
+    setIssueId(String(data[0].id));
+  }
+}
+
   async function savePoll() {
     await fetch("/api/polls", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        issue_id: 4,
-        question,
-        option1,
-        option2,
-        option3,
-      }),
+body: JSON.stringify({
+  issue_id: 1,
+  question,
+  option1,
+  option2,
+  option3,
+}),
     });
 
     setQuestion("");
@@ -41,9 +53,10 @@ export default function PollsPage() {
     loadPolls();
   }
 
-  useEffect(() => {
-    loadPolls();
-  }, []);
+useEffect(() => {
+  loadPolls();
+  loadIssues();
+}, []);
 
   return (
     <div className="flex">
@@ -56,6 +69,21 @@ export default function PollsPage() {
 
         <div className="mt-8 rounded-xl bg-white p-8 shadow">
           <div className="grid gap-4">
+
+            <select
+  className="border rounded p-3"
+  value={issueId}
+  onChange={(e) => setIssueId(e.target.value)}
+>
+  {issues.map((issue) => (
+    <option
+      key={issue.id}
+      value={issue.id}
+    >
+      Issue {issue.issue_number} - {issue.title}
+    </option>
+  ))}
+</select>
 
             <input
               className="border rounded p-3"
