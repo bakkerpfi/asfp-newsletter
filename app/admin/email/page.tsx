@@ -1,36 +1,36 @@
 import AdminSidebar from "@/components/AdminSidebar";
 import CopyBccButton from "@/components/CopyBccButton";
 import CopyLinkButton from "@/components/CopyLinkButton";
-import db from "@/lib/database";
+import { supabase } from "@/lib/supabase";
 
 const WEBSITE_URL =
   "https://asfp-newsletter.vercel.app";
 
-export default function EmailPage() {
-  const latestIssue = db.prepare(`
-    SELECT *
-    FROM issues
-    ORDER BY id DESC
-    LIMIT 1
-  `).get() as any;
+export default async function EmailPage() {
 
-  const subscribers = db.prepare(`
-    SELECT *
-    FROM subscribers
-    ORDER BY name
-  `).all() as any[];
+  const { data: latestIssue } = await supabase
+    .from("issues")
+    .select("*")
+    .order("id", { ascending: false })
+    .limit(1)
+    .single();
+
+  const { data: subscribersData } = await supabase
+    .from("subscribers")
+    .select("*")
+    .order("name", { ascending: true });
+
+  const subscribers = subscribersData ?? [];
 
   const emailList = subscribers
-    .map((s) => s.email)
+    .map((s: any) => s.email)
     .join("; ");
 
-  const subscriberCount = db
-    .prepare("SELECT COUNT(*) AS count FROM subscribers")
-    .get() as { count: number };
+  const subscriberCount = subscribers.length;
 
-const newsletterUrl = latestIssue
-  ? `${WEBSITE_URL}/newsletter/${latestIssue.id}`
-  : "";
+  const newsletterUrl = latestIssue
+    ? `${WEBSITE_URL}/newsletter/${latestIssue.id}`
+    : "";
 
   const emailSubject =
     latestIssue
@@ -84,7 +84,7 @@ Australia & New Zealand`;
               </p>
 
               <p className="mt-6 text-lg font-semibold text-[#1E2D5A]">
-                Subscribers: {subscriberCount.count}
+                Subscribers: {subscriberCount}
               </p>
 
               <div className="mt-6 rounded border bg-slate-50 p-6">

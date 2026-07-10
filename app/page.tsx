@@ -1,14 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
-import db from "@/lib/database";
+import { supabase } from "@/lib/supabase";
 
-export default function HomePage() {
-  const latestIssue = db.prepare(`
-  SELECT *
-  FROM issues
-  ORDER BY id DESC
-  LIMIT 1
-`).get() as any;
+export default async function HomePage() {
+const { data: latestIssue } = await supabase
+  .from("issues")
+  .select("*")
+  .order("id", { ascending: false })
+  .limit(1)
+  .single();
 
   return (
     <main className="min-h-screen bg-slate-100">

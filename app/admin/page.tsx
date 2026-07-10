@@ -1,40 +1,34 @@
 import AdminSidebar from "@/components/AdminSidebar";
-import { initializeDatabase } from "@/lib/init-db";
-import db from "@/lib/database";
+import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
-export default function AdminPage() {
-  initializeDatabase();
+export default async function AdminPage() {
 
-  const subscriberCount = db
-    .prepare("SELECT COUNT(*) AS count FROM subscribers")
-    .get() as { count: number };
+  const { data: subscribers } = await supabase
+  .from("subscribers")
+  .select("*");
 
-  const issueCount = db
-    .prepare("SELECT COUNT(*) AS count FROM issues")
-    .get() as { count: number };
+const { data: issues } = await supabase
+  .from("issues")
+  .select("*")
+  .order("id", { ascending: false });
 
-  const pollCount = db
-    .prepare("SELECT COUNT(*) AS count FROM polls")
-    .get() as { count: number };
+const { data: articles } = await supabase
+  .from("articles")
+  .select("*")
+  .order("id", { ascending: false });
 
-  const articleCount = db
-    .prepare("SELECT COUNT(*) AS count FROM articles")
-    .get() as { count: number };
+const { data: polls } = await supabase
+  .from("polls")
+  .select("*");
 
-  const latestIssue = db.prepare(`
-    SELECT *
-    FROM issues
-    ORDER BY id DESC
-    LIMIT 1
-  `).get() as any;
+const subscriberCount = subscribers?.length ?? 0;
+const issueCount = issues?.length ?? 0;
+const articleCount = articles?.length ?? 0;
+const pollCount = polls?.length ?? 0;
 
-  const recentArticles = db.prepare(`
-    SELECT *
-    FROM articles
-    ORDER BY id DESC
-    LIMIT 5
-  `).all() as any[];
+const latestIssue = issues?.[0] ?? null;
+const recentArticles = articles?.slice(0, 5) ?? [];
   
 
   return (
@@ -62,7 +56,7 @@ export default function AdminPage() {
             </h2>
 
             <p className="mt-3 text-4xl font-bold text-[#F52B3A]">
-              {subscriberCount.count}
+              {subscriberCount}
             </p>
           </div>
 
@@ -72,7 +66,7 @@ export default function AdminPage() {
             </h2>
 
             <p className="mt-3 text-4xl font-bold text-[#F52B3A]">
-              {issueCount.count}
+              {issueCount}
             </p>
           </div>
 
@@ -82,7 +76,7 @@ export default function AdminPage() {
             </h2>
 
             <p className="mt-3 text-4xl font-bold text-[#F52B3A]">
-              {articleCount.count}
+              {articleCount}
             </p>
           </div>
 
@@ -92,7 +86,7 @@ export default function AdminPage() {
             </h2>
 
             <p className="mt-3 text-4xl font-bold text-[#F52B3A]">
-              {pollCount.count}
+              {pollCount}
             </p>
           </div>
 

@@ -1,13 +1,22 @@
 import AdminSidebar from "@/components/AdminSidebar";
-import db from "@/lib/database";
+import { supabase } from "@/lib/supabase";
 
-export default function BuilderPage() {
+export default async function BuilderPage() {
 
-  const issues = db.prepare(`
-    SELECT *
-    FROM issues
-    ORDER BY id DESC
-  `).all() as any[];
+const { data, error } = await supabase
+  .from("issues")
+  .select(`
+    *,
+    articles(id),
+    polls(id)
+  `)
+  .order("id", { ascending: false });
+
+if (error) {
+  throw error;
+}
+
+const issues = data ?? [];
 
   return (
     <div className="flex">
@@ -26,19 +35,10 @@ export default function BuilderPage() {
 
         <div className="mt-8 space-y-6">
 
-          {issues.map((issue) => {
+          {issues.map((issue: any) => {
 
-            const articleCount = db.prepare(`
-              SELECT COUNT(*) AS count
-              FROM articles
-              WHERE issue_id = ?
-            `).get(issue.id) as any;
-
-            const pollCount = db.prepare(`
-              SELECT COUNT(*) AS count
-              FROM polls
-              WHERE issue_id = ?
-            `).get(issue.id) as any;
+            const articleCount = issue.articles?.length ?? 0;
+            const pollCount = issue.polls?.length ?? 0;
 
             return (
 
@@ -67,7 +67,7 @@ export default function BuilderPage() {
                     </p>
 
                     <p className="text-2xl font-bold">
-                      {articleCount.count}
+                      {articleCount}
                     </p>
                   </div>
 
@@ -77,7 +77,7 @@ export default function BuilderPage() {
                     </p>
 
                     <p className="text-2xl font-bold">
-                      {pollCount.count}
+                      {pollCount}
                     </p>
                   </div>
 
