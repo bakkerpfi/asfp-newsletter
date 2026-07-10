@@ -51,10 +51,19 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (error) {
-      console.error("INSERT POLL ERROR:", error);
-      throw error;
+if (error) {
+  console.error("INSERT POLL ERROR:", error);
+
+  return NextResponse.json(
+    {
+      success: false,
+      error,
+    },
+    {
+      status: 500,
     }
+  );
+}
 
     return NextResponse.json({
       success: true,

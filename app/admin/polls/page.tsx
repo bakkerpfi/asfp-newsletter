@@ -37,7 +37,7 @@ async function loadIssues() {
         "Content-Type": "application/json",
       },
 body: JSON.stringify({
-  issue_id: 1,
+  issue_id: Number(issueId),
   question,
   option1,
   option2,
