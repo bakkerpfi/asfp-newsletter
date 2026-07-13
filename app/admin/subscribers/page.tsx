@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AdminSidebar from "@/components/AdminSidebar";
+import * as XLSX from "xlsx";
 
 export default function SubscribersPage() {
   const [name, setName] = useState("");
@@ -46,6 +47,77 @@ async function saveSubscriber() {
   loadSubscribers();
 }
 
+async function importExcel(
+  event: React.ChangeEvent<HTMLInputElement>
+) {
+  const file = event.target.files?.[0];
+
+  if (!file) return;
+
+  const buffer = await file.arrayBuffer();
+
+  const workbook = XLSX.read(buffer);
+
+  const worksheet =
+    workbook.Sheets[workbook.SheetNames[0]];
+
+const rows = XLSX.utils.sheet_to_json<any>(worksheet, {
+  header: 1,
+});
+
+console.log("FIRST ROW:", rows[0]);
+
+const subscribers = rows
+  .slice(4)
+  .map((row: any[]) => {
+    const email = String(row[0] ?? "").trim();
+    const company = String(row[1] ?? "").trim();
+
+    // Generate a friendly name from the email address
+    const localPart = email.split("@")[0];
+
+    const generatedName = localPart
+      .replace(/[._-]+/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+    return {
+      name: generatedName,
+      company,
+      email,
+      member_type: "Industry",
+    };
+  })
+  .filter((s) => s.email);
+
+  console.log(subscribers.slice(0,5));
+
+console.log("FIRST SUBSCRIBER:", subscribers[0]);
+
+  const response = await fetch(
+    "/api/subscribers/import",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        subscribers,
+      }),
+    }
+  );
+
+  const result = await response.json();
+
+  alert(
+    `Imported ${result.imported} subscribers.\nSkipped ${result.skipped} duplicates.`
+  );
+
+  loadSubscribers();
+
+  // Reset file picker
+  event.target.value = "";
+}
+
   useEffect(() => {
     loadSubscribers();
   }, []);
@@ -59,6 +131,14 @@ async function saveSubscriber() {
         <h1 className="text-4xl font-bold text-[#1E2D5A]">
           Subscribers
         </h1>
+
+        <input
+  id="excelImport"
+  type="file"
+  accept=".xlsx"
+  className="hidden"
+  onChange={importExcel}
+/>
 
         <div className="mt-8 rounded-xl bg-white p-8 shadow">
 
@@ -85,12 +165,23 @@ async function saveSubscriber() {
               onChange={(e) => setEmail(e.target.value)}
             />
 
-            <button
-              onClick={saveSubscriber}
-              className="rounded bg-red-500 px-6 py-3 text-white"
-            >
-              Add Subscriber
-            </button>
+<div className="flex gap-4">
+
+  <button
+    onClick={saveSubscriber}
+    className="rounded bg-red-500 px-6 py-3 text-white hover:bg-red-600"
+  >
+    Add Subscriber
+  </button>
+
+  <label
+    htmlFor="excelImport"
+    className="cursor-pointer rounded bg-blue-600 px-6 py-3 text-white hover:bg-blue-700"
+  >
+    Import Excel
+  </label>
+
+</div>
 
           </div>
 
