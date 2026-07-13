@@ -2,6 +2,10 @@ import AdminSidebar from "@/components/AdminSidebar";
 import CopyBccButton from "@/components/CopyBccButton";
 import CopyLinkButton from "@/components/CopyLinkButton";
 import { supabase } from "@/lib/supabase";
+import CopyPersonalLinkButton from "@/components/CopyPersonalLinkButton";
+import Link from "next/link";
+import SendNewsletterButtons from "@/components/SendNewsletterButtons";
+import SubscriberSearch from "@/components/SubscriberSearch";
 
 const WEBSITE_URL =
   "https://asfp-newsletter.vercel.app";
@@ -15,10 +19,11 @@ export default async function EmailPage() {
     .limit(1)
     .single();
 
-  const { data: subscribersData } = await supabase
-    .from("subscribers")
-    .select("*")
-    .order("name", { ascending: true });
+const { data: subscribersData } = await supabase
+  .from("subscribers")
+  .select("*")
+  .eq("active", true)
+  .order("name", { ascending: true });
 
   const subscribers = subscribersData ?? [];
 
@@ -37,7 +42,7 @@ export default async function EmailPage() {
       ? `ASFP ANZ Industry Update – Issue ${latestIssue.issue_number}`
       : "";
 
-  const emailBody = `Dear Member,
+const emailBody = `Dear Member,
 
 Please find attached the latest ASFP Australia & New Zealand Industry Update.
 
@@ -50,7 +55,7 @@ This issue includes:
 
 Read the latest newsletter online:
 
-ASFP Newsletter
+${newsletterUrl}
 
 Kind regards,
 
@@ -130,6 +135,12 @@ Australia & New Zealand`;
                 />
               </div>
 
+<SubscriberSearch
+  subscribers={subscribers}
+  issueId={latestIssue.id}
+  websiteUrl={WEBSITE_URL}
+/>
+
 <div className="mt-8 flex flex-wrap gap-4">
 
   <a
@@ -155,7 +166,27 @@ Australia & New Zealand`;
   </a>
 
 </div>
+<div className="mt-8 rounded-xl border border-green-200 bg-green-50 p-8">
 
+  <h2 className="text-2xl font-bold text-green-800">
+    Send with ASFP Newsletter
+  </h2>
+
+  <p className="mt-3 text-slate-700">
+    Send personalised newsletters directly from the ASFP platform.
+  </p>
+
+  <div className="mt-6 flex flex-wrap gap-4">
+
+<SendNewsletterButtons />
+
+  </div>
+
+  <p className="mt-6 text-sm text-slate-500">
+    Each subscriber receives their own personalised newsletter link and unsubscribe link.
+  </p>
+
+</div>
               <div className="mt-8 rounded-lg border border-orange-200 bg-orange-50 p-6">
 
 <p className="font-semibold text-orange-800">

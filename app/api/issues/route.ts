@@ -74,3 +74,51 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+
+    const { error } = await supabase
+      .from("issues")
+      .update({
+        title: body.title,
+        issue_number: body.issue_number,
+        month: body.month,
+        year: Number(body.year),
+        summary: body.summary,
+      })
+      .eq("id", body.id);
+
+    if (error) {
+      console.error("SUPABASE UPDATE ERROR:", error);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message,
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+    });
+
+  } catch (error) {
+    console.error("PUT ERROR:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: String(error),
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}

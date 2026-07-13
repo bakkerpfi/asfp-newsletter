@@ -200,6 +200,7 @@ console.log("FIRST SUBSCRIBER:", subscribers[0]);
   <th className="py-2 text-left">Name</th>
   <th className="py-2 text-left">Company</th>
   <th className="py-2 text-left">Email</th>
+  <th className="py-2 text-left">Status</th>
   <th className="py-2 text-left">Actions</th>
 </tr>
             </thead>
@@ -222,29 +223,70 @@ console.log("FIRST SUBSCRIBER:", subscribers[0]);
   {subscriber.email}
 </td>
 
+<td>
+  {subscriber.active ? (
+    <span className="rounded bg-green-100 px-2 py-1 text-green-700">
+      Active
+    </span>
+  ) : (
+    <span className="rounded bg-red-100 px-2 py-1 text-red-700">
+      Unsubscribed
+    </span>
+  )}
+</td>
+
 <td className="py-3">
-  <button
-    onClick={async () => {
-      if (!confirm("Delete this subscriber?")) {
-        return;
-      }
 
-      await fetch("/api/subscribers/delete", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: subscriber.id,
-        }),
-      });
+  {subscriber.active ? (
 
-      loadSubscribers();
-    }}
-    className="rounded bg-red-500 px-4 py-2 text-white hover:bg-red-600"
-  >
-    Delete
-  </button>
+    <button
+      onClick={async () => {
+        if (!confirm("Delete this subscriber?")) {
+          return;
+        }
+
+        await fetch("/api/subscribers/delete", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: subscriber.id,
+          }),
+        });
+
+        loadSubscribers();
+      }}
+      className="rounded bg-red-500 px-4 py-2 text-white hover:bg-red-600"
+    >
+      Delete
+    </button>
+
+  ) : (
+
+    <button
+      onClick={async () => {
+
+        await fetch("/api/subscribers/reactivate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: subscriber.id,
+          }),
+        });
+
+        loadSubscribers();
+
+      }}
+      className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+    >
+      Reactivate
+    </button>
+
+  )}
+
 </td>
 
                 </tr>

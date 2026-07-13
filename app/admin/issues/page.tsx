@@ -11,6 +11,7 @@ export default function IssuesPage() {
   const [summary, setSummary] = useState("");
 
   const [issues, setIssues] = useState<any[]>([]);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   async function loadIssues() {
     const response = await fetch("/api/issues");
@@ -19,18 +20,19 @@ export default function IssuesPage() {
   }
 
   async function saveIssue() {
-    const response = await fetch("/api/issues", {
-      method: "POST",
+const response = await fetch("/api/issues", {
+  method: editingId ? "PUT" : "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        title,
-        issue_number: issueNumber,
-        month,
-        year,
-        summary,
-      }),
+body: JSON.stringify({
+  id: editingId,
+  title,
+  issue_number: issueNumber,
+  month,
+  year,
+  summary,
+}),
     });
 
     if (!response.ok) {
@@ -42,9 +44,20 @@ export default function IssuesPage() {
     setIssueNumber("");
     setMonth("");
     setSummary("");
+    setEditingId(null);
 
     loadIssues();
   }
+
+  function editIssue(issue: any) {
+  setEditingId(issue.id);
+
+  setTitle(issue.title);
+  setIssueNumber(String(issue.issue_number));
+  setMonth(issue.month);
+  setYear(String(issue.year));
+  setSummary(issue.summary ?? "");
+}
 
   useEffect(() => {
     loadIssues();
@@ -100,8 +113,25 @@ export default function IssuesPage() {
               onClick={saveIssue}
               className="rounded bg-red-500 px-6 py-3 text-white hover:bg-red-600"
             >
-              Create Issue
+              {editingId ? "Save Changes" : "Create Issue"}
             </button>
+
+{editingId && (
+  <button
+    onClick={() => {
+      setEditingId(null);
+      setTitle("");
+      setIssueNumber("");
+      setMonth("");
+      setYear("2026");
+      setSummary("");
+    }}
+    className="rounded bg-slate-500 px-6 py-3 text-white hover:bg-slate-600"
+  >
+    Cancel
+  </button>
+)}
+
           </div>
         </div>
 
@@ -132,6 +162,13 @@ export default function IssuesPage() {
               <p>
                 {issue.month} {issue.year}
               </p>
+
+              <button
+  onClick={() => editIssue(issue)}
+  className="mt-4 mr-3 rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+>
+  Edit Issue
+</button>
 
               <button
                 onClick={async () => {

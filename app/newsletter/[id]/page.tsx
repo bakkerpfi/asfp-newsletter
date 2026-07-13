@@ -1,16 +1,33 @@
 import { supabase } from "@/lib/supabase";
 import { notFound } from "next/navigation";
-import DownloadPdfButton from "@/components/DownloadPdfButton";
 import PollCard from "@/components/PollCard";
+import Link from "next/link";
+import ReactMarkdown from "react-markdown";
 
 export default async function NewsletterPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ u?: string }>;
 }) {
   const { id } = await params;
+  const { u } = await searchParams;
 
   const issueId = Number(id);
+  let subscriber: any = null;
+
+if (u) {
+  const { data } = await supabase
+    .from("subscribers")
+    .select("*")
+    .eq("unsubscribe_token", u)
+    .maybeSingle();
+
+  subscriber = data;
+  console.log("Token:", u);
+console.log("Subscriber:", subscriber);
+}
 
 const { data: issue } = await supabase
   .from("issues")
@@ -81,6 +98,26 @@ if (!issue) {
 
         </div>
 
+        {subscriber && (
+
+  <div className="border-b bg-green-50 px-10 py-8">
+
+    <h2 className="text-3xl font-bold text-[#1E2D5A]">
+      Welcome back, {subscriber.name} 👋
+    </h2>
+
+    <p className="mt-3 text-slate-700">
+      {subscriber.company}
+    </p>
+
+    <p className="mt-6 text-slate-600">
+      Thank you for being an ASFP Australia & New Zealand subscriber.
+    </p>
+
+  </div>
+
+)}
+
 {/* ISSUE SUMMARY */}
 
 <div className="border-b bg-[#F8FAFC] px-10 py-6">
@@ -142,11 +179,11 @@ if (!issue) {
             </div>
           )}
 
-          {safeArticles.map((article) => (
-            <article
-              key={article.id}
-              className="mb-12 border-b pb-10 last:border-b-0"
-            >
+{safeArticles.map((article) => (
+  <article
+    key={article.id}
+    className="mb-12 border-b pb-10 last:border-b-0"
+  >
 
               <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#EF4444]">
                 {article.category}
@@ -202,8 +239,8 @@ if (!issue) {
                 <hr className="mt-10 border-[#CBD5E1]" />
               </div>
 
-            </article>
-          ))}
+</article>
+))}
 
         </div>
 
@@ -236,28 +273,108 @@ if (!issue) {
 
     </div>
 
-    <div className="border-t bg-[#F8FAFC] px-10 py-8 text-center">
+<div className="border-t bg-[#F8FAFC] px-10 py-10">
 
-      <p className="font-semibold text-[#1E2D5A]">
-        Association for Specialist Fire Protection
+  <h3 className="text-2xl font-bold text-[#1E2D5A]">
+    About Your Subscription
+  </h3>
+
+  {subscriber ? (
+
+    <>
+
+      <p className="mt-6 text-slate-700">
+        This newsletter has been sent to:
       </p>
 
-      <p className="mt-2 text-sm text-[#64748B]">
-        Australia & New Zealand Branch
+      <p className="mt-4 text-xl font-semibold text-[#1E2D5A]">
+        {subscriber.name}
       </p>
 
-    </div>
+      <p className="text-slate-600">
+        {subscriber.company}
+      </p>
+
+      <p className="mt-6 text-slate-600 leading-7">
+        You're receiving this newsletter because you're subscribed to
+        receive ASFP Australia & New Zealand industry updates.
+      </p>
+
+<div className="mt-8 flex flex-wrap gap-4">
+
+  <button
+    disabled
+    className="cursor-not-allowed rounded bg-slate-400 px-6 py-3 font-semibold text-white opacity-80"
+  >
+    Member Portal (Coming Soon)
+  </button>
+
+  <Link
+    href={`/unsubscribe/${subscriber.unsubscribe_token}`}
+    className="rounded bg-red-600 px-6 py-3 font-semibold text-white hover:bg-red-700"
+  >
+    Unsubscribe
+  </Link>
+
+</div>
+
+<p className="mt-6 text-sm text-slate-500">
+  Our secure Member Portal is currently under development. Soon you'll be able
+  to manage your profile, browse previous newsletters, vote in member polls,
+  and access exclusive ASFP member resources.
+</p>
+
+    </>
+
+  ) : (
+
+    <>
+
+      <p className="mt-6 text-slate-600 leading-7">
+        Thank you for reading the ASFP Australia & New Zealand Industry Update.
+      </p>
+
+      <p className="mt-4 text-slate-600">
+        Visit our website to learn more about ASFP and become a subscriber.
+      </p>
+
+    </>
+
+  )}
+
+  <hr className="my-10" />
+
+  <div className="text-center">
+
+    <h4 className="font-semibold text-[#1E2D5A]">
+      Association for Specialist Fire Protection
+    </h4>
+
+    <p className="text-slate-500">
+      Australia & New Zealand Branch
+    </p>
+
+    <p className="mt-4 text-sm text-slate-500">
+      Keeping the passive fire protection industry informed through
+      collaboration, education and technical excellence.
+    </p>
+
+    <p className="mt-6 text-xs text-slate-400">
+      © {new Date().getFullYear()} ASFP Australia & New Zealand
+    </p>
+
+  </div>
+
+</div>
 
   </div>
 
 )}
-      <div className="mx-auto mt-6 max-w-4xl">
+<div className="mx-auto mt-8 max-w-4xl text-center text-sm text-slate-500">
 
-        <DownloadPdfButton
-          title={issue?.title ?? "ASFP Newsletter"}
-        />
+  Thank you for reading the ASFP Australia & New Zealand Industry Update.
 
-      </div>
+</div>
 
     </main>
   );

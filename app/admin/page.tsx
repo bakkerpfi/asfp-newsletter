@@ -1,6 +1,7 @@
 import AdminSidebar from "@/components/AdminSidebar";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import SendNewsletterButtons from "@/components/SendNewsletterButtons";
 
 export default async function AdminPage() {
 
