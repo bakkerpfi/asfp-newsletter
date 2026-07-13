@@ -102,17 +102,14 @@ if (!issue) {
 
   <div className="border-b bg-green-50 px-10 py-8">
 
-    <h2 className="text-3xl font-bold text-[#1E2D5A]">
-      Welcome back, {subscriber.name} 👋
-    </h2>
+<h2 className="text-3xl font-bold text-[#1E2D5A]">
+  Hello, {subscriber.name}
+</h2>
 
-    <p className="mt-3 text-slate-700">
-      {subscriber.company}
-    </p>
-
-    <p className="mt-6 text-slate-600">
-      Thank you for being an ASFP Australia & New Zealand subscriber.
-    </p>
+<p className="mt-4 leading-7 text-slate-600">
+  Thank you for your continued support of ASFP Australia & New Zealand.
+  We hope you enjoy this edition of our Industry Update.
+</p>
 
   </div>
 
@@ -300,20 +297,18 @@ if (!issue) {
         receive ASFP Australia & New Zealand industry updates.
       </p>
 
-<div className="mt-8 flex flex-wrap gap-4">
+<div className="mt-12 border-t pt-8 text-center">
 
-  <button
-    disabled
-    className="cursor-not-allowed rounded bg-slate-400 px-6 py-3 font-semibold text-white opacity-80"
-  >
-    Member Portal (Coming Soon)
-  </button>
+  <p className="text-sm text-slate-500">
+    You are receiving this email because you subscribed to
+    ASFP Australia & New Zealand Industry Updates.
+  </p>
 
   <Link
     href={`/unsubscribe/${subscriber.unsubscribe_token}`}
-    className="rounded bg-red-600 px-6 py-3 font-semibold text-white hover:bg-red-700"
+    className="mt-4 inline-block text-sm font-semibold text-red-600 underline hover:text-red-700"
   >
-    Unsubscribe
+    Unsubscribe from these emails
   </Link>
 
 </div>
