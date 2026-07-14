@@ -13,15 +13,34 @@ export default async function EmailPage() {
     .limit(1)
     .single();
 
-  const { data: subscribersData } = await supabase
+// Get the exact number of active subscribers
+const { count: subscriberCount } = await supabase
+  .from("subscribers")
+  .select("*", {
+    count: "exact",
+    head: true,
+  })
+  .eq("active", true);
+
+// Load ALL active subscribers (handles more than 1000)
+let subscribers: any[] = [];
+
+const pageSize = 1000;
+
+for (
+  let from = 0;
+  from < (subscriberCount ?? 0);
+  from += pageSize
+) {
+  const { data } = await supabase
     .from("subscribers")
     .select("*")
     .eq("active", true)
-    .order("name", { ascending: true });
+    .order("name", { ascending: true })
+    .range(from, from + pageSize - 1);
 
-  const subscribers = subscribersData ?? [];
-
-  const subscriberCount = subscribers.length;
+  subscribers.push(...(data ?? []));
+}
 
   const emailSubject = latestIssue
     ? `ASFP ANZ Industry Update – Issue ${latestIssue.issue_number}`
