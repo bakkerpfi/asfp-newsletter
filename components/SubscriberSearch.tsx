@@ -22,27 +22,29 @@ export default function SubscriberSearch({
   websiteUrl,
 }: Props) {
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Subscriber | null>(null);
 
   const filtered = useMemo(() => {
-    if (!search) return subscribers.slice(0, 20);
+    if (!search.trim()) return [];
 
-    return subscribers
-      .filter((s) =>
-        `${s.name} ${s.company} ${s.email}`
-          .toLowerCase()
-          .includes(search.toLowerCase())
-      )
-      .slice(0, 20);
+    return subscribers.filter((s) =>
+      `${s.name} ${s.company} ${s.email}`
+        .toLowerCase()
+        .includes(search.toLowerCase())
+    );
   }, [search, subscribers]);
 
   async function copyLink(subscriber: Subscriber) {
-    const link =
-      `${websiteUrl}/newsletter/${issueId}?u=${subscriber.unsubscribe_token}`;
+    const link = `${websiteUrl}/newsletter/${issueId}?u=${subscriber.unsubscribe_token}`;
 
     await navigator.clipboard.writeText(link);
 
     alert("Personal newsletter link copied.");
   }
+
+  const selectedLink = selected
+    ? `${websiteUrl}/newsletter/${issueId}?u=${selected.unsubscribe_token}`
+    : "";
 
   return (
     <div className="mt-8 rounded-xl bg-white p-8 shadow">
@@ -57,27 +59,27 @@ export default function SubscriberSearch({
 
       <input
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setSelected(null);
+        }}
         placeholder="Search subscriber..."
         className="mt-6 w-full rounded border p-3"
       />
 
-      <div className="mt-6 space-y-3">
+      <div className="mt-6">
 
-        {filtered.map((subscriber) => {
+        {!selected && filtered.length > 0 && (
 
-          const link =
-            `${websiteUrl}/newsletter/${issueId}?u=${subscriber.unsubscribe_token}`;
+          <div className="rounded border bg-white">
 
-          return (
+            {filtered.map((subscriber) => (
 
-            <div
-              key={subscriber.id}
-              className="flex items-center justify-between rounded border bg-white p-4"
-            >
-
-              <div>
-
+              <button
+                key={subscriber.id}
+                onClick={() => setSelected(subscriber)}
+                className="block w-full border-b p-4 text-left hover:bg-slate-100"
+              >
                 <p className="font-semibold">
                   {subscriber.name}
                 </p>
@@ -86,39 +88,71 @@ export default function SubscriberSearch({
                   {subscriber.company}
                 </p>
 
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-400">
                   {subscriber.email}
                 </p>
 
-                <p className="mt-2 break-all text-xs text-slate-400">
-  {link}
-</p>
+              </button>
 
-              </div>
+            ))}
 
-              <div className="flex gap-3">
+          </div>
 
-                <a
-                  href={link}
-                  target="_blank"
-                  className="rounded bg-green-600 px-4 py-2 text-white"
-                >
-                  Preview
-                </a>
+        )}
 
-                <button
-                  onClick={() => copyLink(subscriber)}
-                  className="rounded bg-blue-700 px-4 py-2 text-white"
-                >
-                  Copy Link
-                </button>
+        {selected && (
 
-              </div>
+          <div className="rounded border bg-white p-6">
+
+            <p className="text-xl font-semibold">
+              {selected.name}
+            </p>
+
+            <p className="text-slate-600">
+              {selected.company}
+            </p>
+
+            <p className="text-slate-500">
+              {selected.email}
+            </p>
+
+            <p className="mt-4 break-all rounded bg-slate-100 p-3 text-xs text-slate-500">
+              {selectedLink}
+            </p>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+
+              <a
+                href={selectedLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+              >
+                Preview
+              </a>
+
+              <button
+                onClick={() => copyLink(selected)}
+                className="rounded bg-blue-700 px-4 py-2 text-white hover:bg-blue-800"
+              >
+                Copy Link
+              </button>
+
+              <button
+                onClick={() => {
+                  setSelected(null);
+                  setSearch("");
+                }}
+                className="rounded bg-slate-600 px-4 py-2 text-white hover:bg-slate-700"
+              >
+                Search Again
+              </button>
 
             </div>
 
-          );
-        })}
+          </div>
+
+        )}
 
       </div>
 
