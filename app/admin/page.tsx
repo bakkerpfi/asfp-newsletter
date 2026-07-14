@@ -5,9 +5,12 @@ import SendNewsletterButtons from "@/components/SendNewsletterButtons";
 
 export default async function AdminPage() {
 
-  const { data: subscribers } = await supabase
+const { count: subscriberCount } = await supabase
   .from("subscribers")
-  .select("*");
+  .select("*", {
+    count: "exact",
+    head: true,
+  });
 
 const { data: issues } = await supabase
   .from("issues")
@@ -23,7 +26,6 @@ const { data: polls } = await supabase
   .from("polls")
   .select("*");
 
-const subscriberCount = subscribers?.length ?? 0;
 const issueCount = issues?.length ?? 0;
 const articleCount = articles?.length ?? 0;
 const pollCount = polls?.length ?? 0;

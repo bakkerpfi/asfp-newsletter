@@ -108,9 +108,21 @@ console.log("FIRST SUBSCRIBER:", subscribers[0]);
 
   const result = await response.json();
 
-  alert(
-    `Imported ${result.imported} subscribers.\nSkipped ${result.skipped} duplicates.`
-  );
+alert(
+`Import Complete
+
+Spreadsheet Rows: ${result.totalRows}
+
+Imported: ${result.imported}
+
+Already Existing: ${result.skippedExisting}
+
+Duplicates in Spreadsheet: ${result.skippedDuplicate}
+
+Invalid Emails: ${result.skippedInvalid}
+
+Total Subscribers: ${result.totalSubscribers}`
+);
 
   loadSubscribers();
 
@@ -192,6 +204,10 @@ console.log("FIRST SUBSCRIBER:", subscribers[0]);
           <h2 className="mb-4 text-2xl font-bold">
             Current Subscribers
           </h2>
+
+          <p className="mb-4 text-lg font-semibold text-blue-700">
+  Showing {subscribers.length} subscribers
+</p>
 
           <table className="w-full">
 

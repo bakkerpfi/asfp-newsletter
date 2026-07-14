@@ -27,11 +27,19 @@ export default function SendNewsletterButtons() {
   }
 
   async function sendNewsletter() {
-    const ok = confirm(
-      "Send this newsletter to ALL active subscribers?"
-    );
+const ok = confirm(
+`You are about to email the newsletter to ALL active subscribers.
 
-    if (!ok) return;
+Every subscriber will receive:
+• Their own personalised newsletter link
+• Their own unsubscribe link
+
+This action cannot be undone.
+
+Do you want to continue?`
+);
+
+if (!ok) return;
 
     const res = await fetch("/api/send-newsletter", {
       method: "POST",
