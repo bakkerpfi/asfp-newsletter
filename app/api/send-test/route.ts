@@ -52,12 +52,13 @@ export async function POST(request: NextRequest) {
     const unsubscribeUrl =
       `${WEBSITE_URL}/unsubscribe/${subscriber.unsubscribe_token}`;
 
-    const { data, error: resendError } = await resend.emails.send({
-      from: "ASFP Australia & New Zealand <onboarding@resend.dev>",
-      to: subscriber.email,
-      subject: `ASFP Industry Update – Issue ${latestIssue.issue_number}`,
-      html: `
-        <h2>Hello ${subscriber.name},</h2>
+const { data, error: resendError } = await resend.emails.send({
+  from: process.env.NEWSLETTER_FROM!,
+  replyTo: process.env.NEWSLETTER_REPLY_TO!,
+  to: subscriber.email,
+  subject: `ASFP Industry Update – Issue ${latestIssue.issue_number}`,
+  html: `
+    <h2>Hello ${subscriber.name},</h2>
 
         <p>
           Thank you for your continued support of

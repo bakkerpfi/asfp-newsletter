@@ -58,7 +58,8 @@ if (subscriber.email !== "ben@bakkerpfi.com") {
 
         await resend.emails.send({
 
-          from: "onboarding@resend.dev",
+          from: "ASFP Australia & New Zealand <newsletter@asfp.co.nz>",
+replyTo: "info@asfp.co.nz",
 
           to: subscriber.email,
 
