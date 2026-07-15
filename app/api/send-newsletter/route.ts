@@ -25,18 +25,52 @@ export async function POST() {
     }
 
     // Active subscribers
-    const { data: subscribers } = await supabase
-      .from("subscribers")
-      .select("*")
-      .eq("active", true)
-      .order("name");
+const { count, error: countError } = await supabase
+  .from("subscribers")
+  .select("*", {
+    count: "exact",
+    head: true,
+  })
+  .eq("active", true);
 
-    if (!subscribers?.length) {
-      return NextResponse.json(
-        { error: "No active subscribers." },
-        { status: 404 }
-      );
-    }
+if (countError) {
+  console.error("SUBSCRIBER COUNT ERROR:", countError);
+
+  return NextResponse.json(
+    { error: "Unable to count active subscribers." },
+    { status: 500 }
+  );
+}
+
+const subscribers: any[] = [];
+const pageSize = 1000;
+
+for (let from = 0; from < (count ?? 0); from += pageSize) {
+  const { data, error } = await supabase
+    .from("subscribers")
+    .select("*")
+    .eq("active", true)
+    .order("name", { ascending: true })
+    .range(from, from + pageSize - 1);
+
+  if (error) {
+    console.error("SUBSCRIBER LOAD ERROR:", error);
+
+    return NextResponse.json(
+      { error: "Unable to load all active subscribers." },
+      { status: 500 }
+    );
+  }
+
+  subscribers.push(...(data ?? []));
+}
+
+if (!subscribers.length) {
+  return NextResponse.json(
+    { error: "No active subscribers." },
+    { status: 404 }
+  );
+}
 
     let sent = 0;
     const failed: string[] = [];
@@ -51,7 +85,7 @@ export async function POST() {
         const unsubscribeUrl =
           `${WEBSITE_URL}/unsubscribe/${subscriber.unsubscribe_token}`;
 
-const { data, error } = await resend.emails.send({
+const { error } = await resend.emails.send({
 
   from: process.env.NEWSLETTER_FROM!,
   replyTo: process.env.NEWSLETTER_REPLY_TO!,
