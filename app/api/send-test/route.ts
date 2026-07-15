@@ -85,18 +85,18 @@ const { data, error: resendError } = await resend.emails.send({
           </a>
         </p>
 
-        <hr>
+<hr>
 
-        <p style="color:#666">
-          You are receiving this email because you subscribed to receive
-          ASFP Australia & New Zealand Industry Updates.
-        </p>
+<p style="color:#666;">
+You are receiving this email because you have previously shown an interest in Passive Fire Protection or the fire protection industry.
+If you do not wish to receive future ASFP Australia & New Zealand industry updates, please unsubscribe below. We apologise for any inconvenience.
+</p>
 
-        <p>
-          <a href="${unsubscribeUrl}">
-            Unsubscribe
-          </a>
-        </p>
+<p>
+  <a href="${unsubscribeUrl}">
+    Unsubscribe
+  </a>
+</p>
       `,
     });
 

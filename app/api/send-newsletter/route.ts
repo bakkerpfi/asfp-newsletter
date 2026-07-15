@@ -112,21 +112,18 @@ replyTo: "info@asfp.co.nz",
 
             </p>
 
-            <hr>
+<hr>
 
-            <p style="font-size:12px;color:#666">
+<p style="color:#666;">
+You are receiving this email because you have previously shown an interest in Passive Fire Protection or the fire protection industry.
+If you do not wish to receive future ASFP Australia & New Zealand industry updates, please unsubscribe below. We apologise for any inconvenience.
+</p>
 
-              You are receiving this email because you subscribed to ASFP updates.
-
-            </p>
-
-            <p>
-
-              <a href="${unsubscribeUrl}">
-                Unsubscribe
-              </a>
-
-            </p>
+<p>
+  <a href="${unsubscribeUrl}">
+    Unsubscribe
+  </a>
+</p>
 
           </div>
           `

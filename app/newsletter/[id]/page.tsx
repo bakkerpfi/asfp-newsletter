@@ -292,17 +292,12 @@ if (!issue) {
         {subscriber.company}
       </p>
 
-      <p className="mt-6 text-slate-600 leading-7">
-        You're receiving this newsletter because you're subscribed to
-        receive ASFP Australia & New Zealand industry updates.
-      </p>
 
 <div className="mt-12 border-t pt-8 text-center">
-
-  <p className="text-sm text-slate-500">
-    You are receiving this email because you subscribed to
-    ASFP Australia & New Zealand Industry Updates.
-  </p>
+     <p className="mt-6 text-slate-600 leading-7">
+You are receiving this email because you have previously shown an interest in Passive Fire Protection or the fire protection industry.
+If you do not wish to receive future ASFP Australia & New Zealand industry updates, please unsubscribe below. We apologise for any inconvenience.
+      </p>
 
   <Link
     href={`/unsubscribe/${subscriber.unsubscribe_token}`}
