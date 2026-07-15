@@ -43,11 +43,6 @@ export async function POST() {
 
     for (const subscriber of subscribers) {
 
-        // SAFETY MODE
-if (subscriber.email !== "ben@bakkerpfi.com") {
-  continue;
-}
-
       try {
 
         const newsletterUrl =
@@ -56,12 +51,12 @@ if (subscriber.email !== "ben@bakkerpfi.com") {
         const unsubscribeUrl =
           `${WEBSITE_URL}/unsubscribe/${subscriber.unsubscribe_token}`;
 
-        await resend.emails.send({
+const { data, error } = await resend.emails.send({
 
-          from: process.env.NEWSLETTER_FROM!,
-          replyTo: process.env.NEWSLETTER_REPLY_TO!,
+  from: process.env.NEWSLETTER_FROM!,
+  replyTo: process.env.NEWSLETTER_REPLY_TO!,
 
-          to: subscriber.email,
+  to: subscriber.email,
 
           subject: `ASFP ANZ Industry Update – Issue ${latestIssue.issue_number}`,
 
@@ -152,9 +147,15 @@ html: `
 </div>
 `
 
-        });
+});
 
-        sent++;
+if (error) {
+  console.error("Failed:", subscriber.email, error);
+  failed.push(subscriber.email);
+} else {
+  console.log("Sent:", subscriber.email);
+  sent++;
+}
 
       } catch (err) {
 
