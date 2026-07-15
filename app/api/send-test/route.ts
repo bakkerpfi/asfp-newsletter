@@ -60,13 +60,13 @@ const { data, error: resendError } = await resend.emails.send({
 html: `
 <div style="font-family:Arial,Helvetica,sans-serif;max-width:700px;margin:0 auto;color:#333;line-height:1.6;">
 
-  <div style="text-align:center;margin-bottom:35px;">
-    <img
-      src="https://www.asfp.co.nz/wp-content/uploads/2024/09/AustraliaNewZealand-02.png"
-      alt="ASFP Australia & New Zealand"
-      style="max-width:220px;height:auto;"
-    />
-  </div>
+<div style="text-align:center;margin-bottom:35px;">
+  <img
+    src="https://asfp-newsletter.vercel.app/AustraliaNewZealand-03.png"
+    alt="ASFP Australia & New Zealand"
+    style="max-width:260px;height:auto;"
+  />
+</div>
 
   <h2 style="color:#1E2D5A;">
     Hello ${subscriber.name},
