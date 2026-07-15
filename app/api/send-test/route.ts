@@ -66,7 +66,7 @@ const { data, error: resendError } = await resend.emails.send({
         </p>
 
         <p>
-          We hope you enjoy this edition of our Industry Update.
+          We hope you enjoy this edition of our Industry Update..
         </p>
 
         <p>
