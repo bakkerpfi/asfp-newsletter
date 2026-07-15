@@ -57,47 +57,95 @@ const { data, error: resendError } = await resend.emails.send({
   replyTo: process.env.NEWSLETTER_REPLY_TO!,
   to: subscriber.email,
   subject: `ASFP Industry Update – Issue ${latestIssue.issue_number}`,
-  html: `
-    <h2>Hello ${subscriber.name},</h2>
+html: `
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:700px;margin:0 auto;color:#333;line-height:1.6;">
 
-        <p>
-          Thank you for your continued support of
-          <strong>ASFP Australia & New Zealand</strong>.
-        </p>
+  <div style="text-align:center;margin-bottom:35px;">
+    <img
+      src="https://www.asfp.co.nz/wp-content/uploads/2024/09/AustraliaNewZealand-02.png"
+      alt="ASFP Australia & New Zealand"
+      style="max-width:220px;height:auto;"
+    />
+  </div>
 
-        <p>
-          We hope you enjoy this edition of our Industry Update.
-        </p>
+  <h2 style="color:#1E2D5A;">
+    Hello ${subscriber.name},
+  </h2>
 
-        <p>
-          <a
-            href="${newsletterUrl}"
-            style="
-              background:#1E2D5A;
-              color:white;
-              padding:12px 20px;
-              text-decoration:none;
-              border-radius:6px;
-              display:inline-block;
-            "
-          >
-            Read Newsletter
-          </a>
-        </p>
+  <p>
+    Thank you for your continued support of
+    <strong>ASFP Australia & New Zealand</strong>.
+  </p>
 
-<hr>
+  <p>
+    We hope you enjoy this edition of the
+    <strong>ASFP ANZ Industry Update.</strong>
+  </p>
 
-<p style="color:#666;">
-You are receiving this email because you have previously shown an interest in Passive Fire Protection or the fire protection industry.
-If you do not wish to receive future ASFP Australia & New Zealand industry updates, please unsubscribe below. We apologise for any inconvenience.
-</p>
+  <p>
+    This edition includes:
+  </p>
 
-<p>
-  <a href="${unsubscribeUrl}">
-    Unsubscribe
+  <ul>
+    <li>Industry News</li>
+    <li>Technical Guidance</li>
+    <li>Association Updates</li>
+    <li>Training Information</li>
+  </ul>
+
+  <p>
+    Click the button below to read the latest newsletter.
+  </p>
+
+  <p style="margin:35px 0;">
+    <a
+      href="${newsletterUrl}"
+      style="
+        background:#1E2D5A;
+        color:#ffffff;
+        padding:14px 24px;
+        text-decoration:none;
+        border-radius:6px;
+        display:inline-block;
+        font-weight:bold;
+      "
+    >
+      Read Newsletter
+    </a>
+  </p>
+
+  <hr style="margin:40px 0;border:none;border-top:1px solid #ddd;" />
+
+  <p style="font-size:14px;color:#666;">
+    You are receiving this email because you have shown interest in Passive Fire Protection previously.
+  </p>
+
+  <p style="font-size:14px;color:#666;">
+    If you do not wish to receive further industry updates, please unsubscribe and accept our apologies.
+  </p>
+
+  <p>
+    <a href="${unsubscribeUrl}">
+      Unsubscribe
+    </a>
+  </p>
+
+  <br>
+
+  <strong>Paul Ryan</strong><br>
+  Managing Director<br>
+  ASFP Australia & New Zealand<br><br>
+
+  Mob: +64 (0) 27 338 3338<br>
+  Tel: 0800 304 355<br>
+
+  Website:
+  <a href="https://www.asfp.co.nz">
+    www.asfp.co.nz
   </a>
-</p>
-      `,
+
+</div>
+`
     });
 
     if (resendError) {
