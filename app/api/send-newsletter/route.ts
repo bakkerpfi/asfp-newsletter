@@ -66,17 +66,17 @@ if (subscriber.email !== "ben@bakkerpfi.com") {
           subject: `ASFP ANZ Industry Update – Issue ${latestIssue.issue_number}`,
 
 html: `
-<div style="font-family:Arial,Helvetica,sans-serif;max-width:700px;margin:0 auto;color:#333;line-height:1.6;">
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:700px;margin:0 auto;color:#333;line-height:1.6;text-align:left;">
 
-<div style="text-align:center;margin-bottom:35px;">
-  <img
-    src="https://asfp-newsletter.vercel.app/AustraliaNewZealand-03.png"
-    alt="ASFP Australia & New Zealand"
-    style="max-width:260px;height:auto;"
-  />
-</div>
+  <div style="margin-bottom:25px;">
+    <img
+      src="https://asfp-newsletter.vercel.app/AustraliaNewZealand-03.png"
+      alt="ASFP Australia & New Zealand"
+      style="max-width:140px;height:auto;display:block;"
+    />
+  </div>
 
-  <h2 style="color:#1E2D5A;">
+  <h2 style="color:#1E2D5A;margin-top:0;">
     Hello ${subscriber.name},
   </h2>
 
