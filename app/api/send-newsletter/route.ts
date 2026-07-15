@@ -68,13 +68,13 @@ if (subscriber.email !== "ben@bakkerpfi.com") {
 html: `
 <div style="font-family:Arial,Helvetica,sans-serif;max-width:700px;margin:0 auto;color:#333;line-height:1.6;text-align:left;">
 
-  <div style="margin-bottom:25px;">
-    <img
-      src="https://asfp-newsletter.vercel.app/AustraliaNewZealand-03.png"
-      alt="ASFP Australia & New Zealand"
-      style="max-width:140px;height:auto;display:block;"
-    />
-  </div>
+<div style="margin-bottom:25px;">
+  <img
+    src="https://asfp-newsletter.vercel.app/AustraliaNewZealand-03.png"
+    alt="ASFP Australia & New Zealand"
+    style="max-width:70px;height:auto;display:block;"
+  />
+</div>
 
   <h2 style="color:#1E2D5A;margin-top:0;">
     Hello ${subscriber.name},
@@ -143,9 +143,6 @@ html: `
   <strong>Paul Ryan</strong><br>
   Managing Director<br>
   ASFP Australia & New Zealand<br><br>
-
-  Mob: +64 (0) 27 338 3338<br>
-  Tel: 0800 304 355<br>
 
   Website:
   <a href="https://www.asfp.co.nz">
