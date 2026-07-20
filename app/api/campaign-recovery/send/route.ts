@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabase } from "@/lib/supabase";
+import { buildRecovery } from "@/lib/campaign-recovery";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+console.log(
+  "RESEND KEY:",
+  process.env.RESEND_API_KEY?.substring(0, 12)
+);
+
+const resend = new Resend(
+  process.env.RESEND_API_KEY
+);
 
 const WEBSITE_URL =
   "https://asfp-newsletter.vercel.app";
@@ -169,56 +177,28 @@ function createEmailHtml(
   `;
 }
 
-async function loadActiveSubscribers() {
+async function loadLatestIssue() {
   const {
-    count,
-    error: countError,
+    data: latestIssue,
+    error: issueError,
   } = await supabase
-    .from("subscribers")
-    .select("*", {
-      count: "exact",
-      head: true,
-    })
-    .eq("active", true);
+    .from("issues")
+    .select("id, issue_number")
+    .order("id", { ascending: false })
+    .limit(1)
+    .single();
 
-  if (countError) {
+  if (issueError || !latestIssue) {
     throw new Error(
-      `Unable to count active subscribers: ` +
-        countError.message
+      issueError?.message ||
+        "No newsletter issue found."
     );
   }
 
-  const subscribers: Subscriber[] = [];
-
-  for (
-    let from = 0;
-    from < (count ?? 0);
-    from += DATABASE_PAGE_SIZE
-  ) {
-    const { data, error } = await supabase
-      .from("subscribers")
-      .select(
-        "id, name, email, unsubscribe_token"
-      )
-      .eq("active", true)
-      .order("id", { ascending: true })
-      .range(
-        from,
-        from + DATABASE_PAGE_SIZE - 1
-      );
-
-    if (error) {
-      throw new Error(
-        `Unable to load subscribers: ${error.message}`
-      );
-    }
-
-    subscribers.push(
-      ...((data ?? []) as Subscriber[])
-    );
-  }
-
-  return subscribers;
+  return {
+    id: Number(latestIssue.id),
+    issueNumber: latestIssue.issue_number,
+  };
 }
 
 async function loadSentSubscriberIds(
@@ -268,6 +248,72 @@ async function loadSentSubscriberIds(
   return sentSubscriberIds;
 }
 
+/*
+ * GET is a safe preview.
+ *
+ * Visiting the URL in the browser does not
+ * send any emails.
+ */
+export async function GET() {
+  try {
+    const recovery = await buildRecovery();
+
+    const latestIssue =
+      await loadLatestIssue();
+
+    const sentSubscriberIds =
+      await loadSentSubscriberIds(
+        latestIssue.id
+      );
+
+    const subscribers =
+      recovery.subscribers as Subscriber[];
+
+    const readyToSend =
+      subscribers.filter(
+        (subscriber) =>
+          !sentSubscriberIds.has(
+            Number(subscriber.id)
+          )
+      );
+
+    const alreadySent =
+      subscribers.length -
+      readyToSend.length;
+
+    return NextResponse.json({
+      success: true,
+      previewOnly: true,
+      issueId: latestIssue.id,
+      issueNumber:
+        latestIssue.issueNumber,
+      found: subscribers.length,
+      alreadySent,
+      readyToSend: readyToSend.length,
+      summary: recovery.summary,
+    });
+  } catch (error) {
+    console.error(
+      "RECOVERY PREVIEW ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unexpected error.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/*
+ * POST performs the recovery send.
+ */
 export async function POST() {
   try {
     const fromEmail =
@@ -279,6 +325,7 @@ export async function POST() {
     if (!process.env.RESEND_API_KEY) {
       return NextResponse.json(
         {
+          success: false,
           error:
             "RESEND_API_KEY is not configured.",
         },
@@ -289,6 +336,7 @@ export async function POST() {
     if (!fromEmail) {
       return NextResponse.json(
         {
+          success: false,
           error:
             "NEWSLETTER_FROM is not configured.",
         },
@@ -299,6 +347,7 @@ export async function POST() {
     if (!replyTo) {
       return NextResponse.json(
         {
+          success: false,
           error:
             "NEWSLETTER_REPLY_TO is not configured.",
         },
@@ -307,97 +356,63 @@ export async function POST() {
     }
 
     /*
-     * Load the latest newsletter issue.
+     * Recover only the matched subscribers
+     * identified by campaign recovery.
      */
-    const {
-      data: latestIssue,
-      error: issueError,
-    } = await supabase
-      .from("issues")
-      .select("id, issue_number")
-      .order("id", { ascending: false })
-      .limit(1)
-      .single();
+    const recovery = await buildRecovery();
 
-    if (issueError || !latestIssue) {
-      console.error(
-        "ISSUE LOAD ERROR:",
-        issueError
-      );
-
-      return NextResponse.json(
-        {
-          error:
-            "No newsletter issue found.",
-        },
-        { status: 404 }
-      );
-    }
-
-    const issueId = Number(latestIssue.id);
-
-    /*
-     * Load all active subscribers.
-     */
     const subscribers =
-      await loadActiveSubscribers();
+      recovery.subscribers as Subscriber[];
 
-    if (subscribers.length === 0) {
-      return NextResponse.json(
-        {
-          error: "No active subscribers.",
-        },
-        { status: 404 }
-      );
-    }
+    const latestIssue =
+      await loadLatestIssue();
+
+    const issueId = latestIssue.id;
 
     /*
-     * Load everyone already recorded as sent
-     * for this particular newsletter issue.
+     * Do not resend to anyone already recorded
+     * as sent for this issue.
      */
     const sentSubscriberIds =
       await loadSentSubscriberIds(issueId);
 
-    /*
-     * Only retain subscribers who have not
-     * already received this issue.
-     */
     const pendingSubscribers =
       subscribers.filter(
         (subscriber) =>
-          !sentSubscriberIds.has(subscriber.id)
+          !sentSubscriberIds.has(
+            Number(subscriber.id)
+          )
       );
 
     const skipped =
       subscribers.length -
       pendingSubscribers.length;
 
-    /*
-     * The campaign is already complete.
-     */
     if (pendingSubscribers.length === 0) {
       return NextResponse.json({
         success: true,
         complete: true,
         message:
-          "Campaign already complete. No emails were sent.",
+          "Recovery campaign already complete. No emails were sent.",
         issueId,
-        total: subscribers.length,
-        pendingBeforeRun: 0,
-        sent: 0,
+        issueNumber:
+          latestIssue.issueNumber,
+        found: subscribers.length,
         skipped,
-        failedCount: 0,
+        sent: 0,
+        failed: 0,
         remaining: 0,
-        failed: [],
       });
     }
 
     let sent = 0;
-    const failed: FailedBatch[] = [];
+
+    const failedBatches: FailedBatch[] =
+      [];
 
     /*
-     * Send pending subscribers in Resend
-     * batches of no more than 100.
+     * Resend permits up to 100 emails in
+     * each batch request.
      */
     for (
       let index = 0;
@@ -417,7 +432,7 @@ export async function POST() {
           to: subscriber.email,
           subject:
             `ASFP ANZ Industry Update – ` +
-            `Issue ${latestIssue.issue_number}`,
+            `Issue ${latestIssue.issueNumber}`,
           html: createEmailHtml(
             subscriber,
             issueId
@@ -441,11 +456,11 @@ export async function POST() {
           "Unknown batch sending error.";
 
         console.error(
-          `BATCH ${batchNumber} FAILED:`,
+          `RECOVERY BATCH ${batchNumber} FAILED:`,
           resendError
         );
 
-        failed.push({
+        failedBatches.push({
           emails: subscriberBatch.map(
             (subscriber) =>
               subscriber.email
@@ -454,6 +469,7 @@ export async function POST() {
         });
 
         await delay(BATCH_DELAY_MS);
+
         continue;
       }
 
@@ -463,72 +479,55 @@ export async function POST() {
           : [];
 
       /*
-       * A successful Resend batch should return
-       * one message ID for each submitted email.
-       *
-       * Do not record the batch as sent when the
-       * response count does not match. This avoids
-       * creating unreliable tracking records.
+       * Do not create tracking records unless
+       * every submitted email has a Resend ID.
        */
       if (
         resendResults.length !==
         subscriberBatch.length
       ) {
         const reason =
-          `Resend accepted the batch but returned ` +
+          `Resend returned ` +
           `${resendResults.length} message IDs for ` +
-          `${subscriberBatch.length} emails.`;
+          `${subscriberBatch.length} recovery emails.`;
 
         console.error(
-          `BATCH ${batchNumber} TRACKING ERROR:`,
+          `RECOVERY BATCH ${batchNumber} TRACKING ERROR:`,
           reason
         );
-
-        failed.push({
-          emails: subscriberBatch.map(
-            (subscriber) =>
-              subscriber.email
-          ),
-          reason,
-        });
 
         return NextResponse.json(
           {
             success: false,
             complete: false,
             error:
-              "The emails may have been accepted by Resend, " +
-              "but the send history could not be matched safely. " +
-              "Do not press Resume until this has been checked.",
+              "The recovery emails may have been accepted by Resend, but their send history could not be matched safely. Do not press Send Recovery again until this has been checked.",
             issueId,
-            total: subscribers.length,
-            pendingBeforeRun:
-              pendingSubscribers.length,
-            sent,
+            found: subscribers.length,
             skipped,
-            failedCount:
+            sent,
+            failed:
               subscriberBatch.length,
             remaining:
               pendingSubscribers.length -
               sent,
-            failed,
+            details: reason,
           },
           { status: 500 }
         );
       }
 
-      /*
-       * Match each subscriber to the corresponding
-       * Resend message ID and record the entire batch.
-       */
+      const sentAt =
+        new Date().toISOString();
+
       const sendRecords =
         subscriberBatch.map(
           (subscriber, batchIndex) => ({
             issue_id: issueId,
-            subscriber_id: subscriber.id,
+            subscriber_id:
+              Number(subscriber.id),
             email: subscriber.email,
-            sent_at:
-              new Date().toISOString(),
+            sent_at: sentAt,
             resend_id:
               resendResults[batchIndex]?.id ??
               null,
@@ -548,48 +547,27 @@ export async function POST() {
 
       if (trackingError) {
         console.error(
-          `BATCH ${batchNumber} DATABASE TRACKING ERROR:`,
+          `RECOVERY BATCH ${batchNumber} DATABASE ERROR:`,
           trackingError
         );
 
-        /*
-         * Resend has already accepted these emails.
-         * Continuing would make it unsafe to resume,
-         * because this batch has not been recorded.
-         */
         return NextResponse.json(
           {
             success: false,
             complete: false,
             error:
-              "Resend accepted a batch, but the database " +
-              "could not record it. Do not press Resume " +
-              "until the database problem has been checked.",
+              "Resend accepted a recovery batch, but the database could not record it. Do not press Send Recovery again until this has been checked.",
             details:
               trackingError.message,
             issueId,
-            total: subscribers.length,
-            pendingBeforeRun:
-              pendingSubscribers.length,
-            sent,
+            found: subscribers.length,
             skipped,
-            failedCount:
+            sent,
+            failed:
               subscriberBatch.length,
             remaining:
               pendingSubscribers.length -
               sent,
-            failed: [
-              ...failed,
-              {
-                emails:
-                  subscriberBatch.map(
-                    (subscriber) =>
-                      subscriber.email
-                  ),
-                reason:
-                  trackingError.message,
-              },
-            ],
           },
           { status: 500 }
         );
@@ -598,13 +576,10 @@ export async function POST() {
       sent += subscriberBatch.length;
 
       console.log(
-        `Batch ${batchNumber} complete: ` +
+        `Recovery batch ${batchNumber} complete: ` +
           `${subscriberBatch.length} emails accepted and recorded.`
       );
 
-      /*
-       * Reduce the chance of a 429 response.
-       */
       if (
         index + RESEND_BATCH_SIZE <
         pendingSubscribers.length
@@ -613,7 +588,7 @@ export async function POST() {
       }
     }
 
-    const failedCount = failed.reduce(
+    const failed = failedBatches.reduce(
       (total, batch) =>
         total + batch.emails.length,
       0
@@ -623,38 +598,33 @@ export async function POST() {
       pendingSubscribers.length -
       sent;
 
-     await supabase
-  .from("issues")
-  .update({
-    campaign_complete: remaining === 0,
-  })
-  .eq("id", issueId); 
-
     return NextResponse.json({
-      success: failedCount === 0,
+      success: failed === 0,
       complete: remaining === 0,
       message:
         remaining === 0
-          ? "Campaign complete."
-          : "Campaign paused with emails remaining.",
+          ? "Recovery campaign complete."
+          : "Recovery campaign finished with emails remaining.",
       issueId,
-      total: subscribers.length,
-      pendingBeforeRun:
-        pendingSubscribers.length,
-      sent,
+      issueNumber:
+        latestIssue.issueNumber,
+      found: subscribers.length,
       skipped,
-      failedCount,
-      remaining,
+      sent,
       failed,
+      remaining,
+      failedBatches,
+      summary: recovery.summary,
     });
   } catch (error) {
     console.error(
-      "SEND NEWSLETTER ERROR:",
+      "RECOVERY SEND ERROR:",
       error
     );
 
     return NextResponse.json(
       {
+        success: false,
         error:
           error instanceof Error
             ? error.message

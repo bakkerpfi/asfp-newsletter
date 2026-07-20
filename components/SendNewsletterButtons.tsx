@@ -4,6 +4,91 @@ import { useState } from "react";
 
 export default function SendNewsletterButtons() {
   const [proofEmail, setProofEmail] = useState("");
+  const [sendingRecovery, setSendingRecovery] = useState(false);
+
+  async function resumeCampaign() {
+
+  if (
+    !confirm(
+      "Resume this newsletter campaign?\n\nOnly subscribers who have NOT already received this issue will be emailed."
+    )
+  ) {
+    return;
+  }
+
+  const response = await fetch(
+    "/api/resume-newsletter",
+    {
+      method: "POST",
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    alert(data.error ?? "Resume failed.");
+    return;
+  }
+
+alert(
+  `Campaign resumed.\n\n` +
+  `Sent: ${data.sent}\n` +
+  `Skipped: ${data.skipped}`
+);
+
+window.dispatchEvent(
+  new Event("campaign-status-updated")
+);
+
+}
+
+  async function sendRecovery() {
+
+  const ok = confirm(
+`You are about to resend ONLY the subscribers identified by Campaign Recovery.
+
+Subscribers who have already been recovered will NOT receive another email.
+
+Do you want to continue?`
+  );
+
+  if (!ok) return;
+
+  try {
+
+    setSendingRecovery(true);
+
+    const res = await fetch(
+      "/api/campaign-recovery/send",
+      {
+        method: "POST",
+      }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error ?? "Recovery failed.");
+      return;
+    }
+
+alert(
+  `Recovery Complete!\n\n` +
+  `Recovered: ${data.found}\n` +
+  `Sent: ${data.sent}\n` +
+  `Remaining: ${data.remaining}`
+);
+
+window.dispatchEvent(
+  new Event("campaign-status-updated")
+);
+
+  } finally {
+
+    setSendingRecovery(false);
+
+  }
+}
 
   async function sendTest() {
     const res = await fetch("/api/send-test", {
@@ -52,9 +137,16 @@ if (!ok) return;
       return;
     }
 
-    alert(
-      `Newsletter complete!\n\nSent: ${data.sent}\nFailed: ${data.failed.length}`
-    );
+alert(
+  `Newsletter complete!\n\n` +
+  `Total: ${data.total}\n` +
+  `Sent: ${data.sent}\n` +
+  `Failed: ${data.failedCount}`
+);
+
+window.dispatchEvent(
+  new Event("campaign-status-updated")
+);
   }
 
   return (
@@ -91,6 +183,23 @@ if (!ok) return;
         >
           Send Newsletter
         </button>
+
+        <button
+  onClick={resumeCampaign}
+  className="rounded bg-orange-600 px-6 py-3 text-white hover:bg-orange-700"
+>
+  Resume Campaign
+</button>
+
+<button
+  onClick={sendRecovery}
+  disabled={sendingRecovery}
+  className="rounded bg-purple-700 px-6 py-3 text-white hover:bg-purple-800 disabled:bg-gray-400"
+>
+  {sendingRecovery
+    ? "Recovering..."
+    : "Recovery Emails"}
+</button>
 
       </div>
 
