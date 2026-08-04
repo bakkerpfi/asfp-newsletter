@@ -199,17 +199,42 @@ Total Subscribers: ${result.totalSubscribers}`
 
         </div>
 
-        <div className="mt-8 rounded-xl bg-white p-8 shadow">
+<div className="mt-8 rounded-xl bg-white p-8 shadow">
 
-          <h2 className="mb-4 text-2xl font-bold">
-            Current Subscribers
-          </h2>
+  <div className="flex items-center justify-between">
 
-          <p className="mb-4 text-lg font-semibold text-blue-700">
-  Showing {subscribers.length} subscribers
-</p>
+    <h2 className="text-2xl font-bold">
+      Current Subscribers
+    </h2>
 
-          <table className="w-full">
+    <div className="flex flex-wrap gap-3">
+
+      <a
+        href="/api/subscribers/export?status=active"
+        className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+      >
+        Export Active
+      </a>
+
+      <a
+        href="/api/subscribers/export?status=inactive"
+        className="rounded bg-orange-600 px-4 py-2 text-white hover:bg-orange-700"
+      >
+        Export Unsubscribed
+      </a>
+
+      <a
+        href="/api/subscribers/export?status=all"
+        className="rounded bg-blue-700 px-4 py-2 text-white hover:bg-blue-800"
+      >
+        Export All
+      </a>
+
+    </div>
+
+  </div>
+
+  <table className="mt-6 w-full">
 
             <thead>
 <tr className="border-b">
