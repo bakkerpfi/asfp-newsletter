@@ -45,10 +45,13 @@ export async function POST(request: Request) {
       spreadsheetEmails.add(email);
 
       // Already exists in Supabase
-      if (existingEmails.has(email)) {
-        skippedExisting++;
-        continue;
-      }
+if (existingEmails.has(email)) {
+  console.log("EXISTS:", email);
+  skippedExisting++;
+  continue;
+}
+
+console.log("IMPORT:", email);
 
       subscribersToImport.push({
         name: s.name,
@@ -58,25 +61,29 @@ export async function POST(request: Request) {
       });
     }
 
+    console.log("Spreadsheet received:", uploadedSubscribers.length);
+console.log("Subscribers to import:", subscribersToImport.length);
+console.log("Already existing:", skippedExisting);
+console.log("Duplicates:", skippedDuplicate);
+console.log("Invalid:", skippedInvalid);
+
     let imported = 0;
 
-    // Import in batches of 200
-    const batchSize = 200;
+// Import subscribers one at a time
+for (const subscriber of subscribersToImport) {
 
-    for (let i = 0; i < subscribersToImport.length; i += batchSize) {
-      const batch = subscribersToImport.slice(i, i + batchSize);
+  const { error } = await supabase
+    .from("subscribers")
+    .insert(subscriber);
 
-      const { error } = await supabase
-        .from("subscribers")
-        .insert(batch);
+  if (error) {
+    console.log("Skipped:", subscriber.email);
+    console.log(error);
+    continue;
+  }
 
-      if (error) {
-        console.error(error);
-        continue;
-      }
-
-      imported += batch.length;
-    }
+  imported++;
+}
 
     return NextResponse.json({
       success: true,
