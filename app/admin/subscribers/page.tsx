@@ -1,18 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import AdminSidebar from "@/components/AdminSidebar";
 import * as XLSX from "xlsx";
 
 export default function SubscribersPage() {
-  const searchParams = useSearchParams();
-
-  const initialStatus =
-    searchParams.get("status") ?? "all";
 
   const [statusFilter, setStatusFilter] =
-    useState(initialStatus);
+  useState("all");
 
   const [search, setSearch] = useState("");
 
@@ -154,9 +149,23 @@ Total Subscribers: ${result.totalSubscribers}`
     event.target.value = "";
   }
 
-  useEffect(() => {
-    loadSubscribers();
-  }, []);
+useEffect(() => {
+  loadSubscribers();
+
+  const params = new URLSearchParams(
+    window.location.search
+  );
+
+  const status = params.get("status");
+
+  if (
+    status === "active" ||
+    status === "inactive" ||
+    status === "all"
+  ) {
+    setStatusFilter(status);
+  }
+}, []);
 
   /*
    * SUBSCRIBER COUNTS
