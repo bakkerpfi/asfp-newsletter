@@ -3,45 +3,66 @@ import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
 export default async function AdminPage() {
+  const PREVIEW_EMAIL = "Paul.Ryan@asfp.co.nz";
 
-const PREVIEW_EMAIL = "Paul.Ryan@asfp.co.nz";
+  // Total subscribers - includes active and unsubscribed
+  const { count: subscriberCount } = await supabase
+    .from("subscribers")
+    .select("*", {
+      count: "exact",
+      head: true,
+    });
 
-const { count: subscriberCount } = await supabase
-  .from("subscribers")
-  .select("*", {
-    count: "exact",
-    head: true,
-  });
+  // Active subscribers - people who will actually receive emails
+  const { count: activeSubscriberCount } = await supabase
+    .from("subscribers")
+    .select("*", {
+      count: "exact",
+      head: true,
+    })
+    .eq("active", true);
 
-const { data: issues } = await supabase
-  .from("issues")
-  .select("*")
-  .order("id", { ascending: false });
+  // Unsubscribed subscribers
+  const { count: unsubscribedCount } = await supabase
+    .from("subscribers")
+    .select("*", {
+      count: "exact",
+      head: true,
+    })
+    .eq("active", false);
 
-const { data: articles } = await supabase
-  .from("articles")
-  .select("*")
-  .order("id", { ascending: false });
+  // Newsletter issues
+  const { data: issues } = await supabase
+    .from("issues")
+    .select("*")
+    .order("id", { ascending: false });
 
-const { data: polls } = await supabase
-  .from("polls")
-  .select("*");
+  // Articles
+  const { data: articles } = await supabase
+    .from("articles")
+    .select("*")
+    .order("id", { ascending: false });
 
-const issueCount = issues?.length ?? 0;
-const articleCount = articles?.length ?? 0;
-const pollCount = polls?.length ?? 0;
+  // Polls
+  const { data: polls } = await supabase
+    .from("polls")
+    .select("*");
 
-const latestIssue = issues?.[0] ?? null;
-console.log("LATEST ISSUE:", latestIssue);
-const recentArticles = articles?.slice(0, 5) ?? [];
-const { data: paul } = await supabase
-  .from("subscribers")
-  .select("unsubscribe_token")
-  .ilike("email", PREVIEW_EMAIL)
-  .single();
+  const issueCount = issues?.length ?? 0;
+  const articleCount = articles?.length ?? 0;
+  const pollCount = polls?.length ?? 0;
 
-  console.log("PAUL:", paul);
-  
+  const latestIssue = issues?.[0] ?? null;
+
+  const recentArticles =
+    articles?.slice(0, 5) ?? [];
+
+  // Paul preview link
+  const { data: paul } = await supabase
+    .from("subscribers")
+    .select("unsubscribe_token")
+    .ilike("email", PREVIEW_EMAIL)
+    .single();
 
   return (
     <div className="flex">
@@ -58,21 +79,79 @@ const { data: paul } = await supabase
           Welcome to the ASFP Newsletter Portal.
         </p>
 
-        {/* STATISTICS */}
+        {/* SUBSCRIBER STATISTICS */}
 
-        <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-8 grid gap-6 md:grid-cols-3">
 
-          <div className="rounded-xl bg-white p-6 shadow">
+          {/* TOTAL */}
+
+          <Link
+            href="/admin/subscribers"
+            className="rounded-xl bg-white p-6 shadow transition hover:-translate-y-1 hover:shadow-lg"
+          >
             <h2 className="text-xl font-bold text-[#1E2D5A]">
-              Subscribers
+              Total Subscribers
             </h2>
 
             <p className="mt-3 text-4xl font-bold text-[#F52B3A]">
-              {subscriberCount}
+              {subscriberCount ?? 0}
             </p>
-          </div>
 
-          <div className="rounded-xl bg-white p-6 shadow">
+            <p className="mt-2 text-sm font-semibold text-slate-500">
+              View all subscribers →
+            </p>
+          </Link>
+
+          {/* ACTIVE */}
+
+          <Link
+            href="/admin/subscribers?status=active"
+            className="rounded-xl bg-white p-6 shadow transition hover:-translate-y-1 hover:shadow-lg"
+          >
+            <h2 className="text-xl font-bold text-[#1E2D5A]">
+              Active Subscribers
+            </h2>
+
+            <p className="mt-3 text-4xl font-bold text-green-600">
+              {activeSubscriberCount ?? 0}
+            </p>
+
+            <p className="mt-2 text-sm font-semibold text-green-600">
+              View active subscribers →
+            </p>
+          </Link>
+
+          {/* UNSUBSCRIBED */}
+
+          <Link
+            href="/admin/subscribers?status=inactive"
+            className="rounded-xl bg-white p-6 shadow transition hover:-translate-y-1 hover:shadow-lg"
+          >
+            <h2 className="text-xl font-bold text-[#1E2D5A]">
+              Unsubscribed
+            </h2>
+
+            <p className="mt-3 text-4xl font-bold text-orange-600">
+              {unsubscribedCount ?? 0}
+            </p>
+
+            <p className="mt-2 text-sm font-semibold text-orange-600">
+              View unsubscribed →
+            </p>
+          </Link>
+
+        </div>
+
+        {/* CONTENT STATISTICS */}
+
+        <div className="mt-6 grid gap-6 md:grid-cols-3">
+
+          {/* ISSUES */}
+
+          <Link
+            href="/admin/issues"
+            className="rounded-xl bg-white p-6 shadow transition hover:-translate-y-1 hover:shadow-lg"
+          >
             <h2 className="text-xl font-bold text-[#1E2D5A]">
               Newsletter Issues
             </h2>
@@ -80,9 +159,14 @@ const { data: paul } = await supabase
             <p className="mt-3 text-4xl font-bold text-[#F52B3A]">
               {issueCount}
             </p>
-          </div>
+          </Link>
 
-          <div className="rounded-xl bg-white p-6 shadow">
+          {/* ARTICLES */}
+
+          <Link
+            href="/admin/articles"
+            className="rounded-xl bg-white p-6 shadow transition hover:-translate-y-1 hover:shadow-lg"
+          >
             <h2 className="text-xl font-bold text-[#1E2D5A]">
               Articles
             </h2>
@@ -90,9 +174,14 @@ const { data: paul } = await supabase
             <p className="mt-3 text-4xl font-bold text-[#F52B3A]">
               {articleCount}
             </p>
-          </div>
+          </Link>
 
-          <div className="rounded-xl bg-white p-6 shadow">
+          {/* POLLS */}
+
+          <Link
+            href="/admin/polls"
+            className="rounded-xl bg-white p-6 shadow transition hover:-translate-y-1 hover:shadow-lg"
+          >
             <h2 className="text-xl font-bold text-[#1E2D5A]">
               Polls
             </h2>
@@ -100,202 +189,218 @@ const { data: paul } = await supabase
             <p className="mt-3 text-4xl font-bold text-[#F52B3A]">
               {pollCount}
             </p>
+          </Link>
+
+        </div>
+
+        {/* CAMPAIGN STATUS */}
+
+        <div className="mt-8 rounded-xl bg-white p-8 shadow">
+
+          <h2 className="text-3xl font-bold text-[#1E2D5A]">
+            Campaign Status
+          </h2>
+
+          <div className="mt-8 grid gap-8 md:grid-cols-4">
+
+            <div>
+              <p className="text-slate-500">
+                Status
+              </p>
+
+              <p className="text-3xl font-bold text-orange-600">
+                Draft
+              </p>
+            </div>
+
+            <div>
+              <p className="text-slate-500">
+                Active Subscribers
+              </p>
+
+              <p className="text-3xl font-bold">
+                {activeSubscriberCount ?? 0}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-slate-500">
+                Current Issue
+              </p>
+
+              <p className="text-3xl font-bold">
+                {latestIssue
+                  ? `#${latestIssue.issue_number}`
+                  : "—"}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-slate-500">
+                Last Campaign
+              </p>
+
+              <p className="text-3xl font-bold text-slate-700">
+                Never Sent
+              </p>
+            </div>
+
           </div>
 
         </div>
 
-{/* CAMPAIGN STATUS */}
+        {/* QUICK ACTIONS */}
 
-<div className="mt-8 rounded-xl bg-white p-8 shadow">
+        <div className="mt-8 rounded-xl bg-white p-8 shadow">
 
-  <h2 className="text-3xl font-bold text-[#1E2D5A]">
-    Campaign Status
-  </h2>
+          <h2 className="mb-6 text-2xl font-bold text-[#1E2D5A]">
+            Quick Actions
+          </h2>
 
-  <div className="mt-8 grid gap-8 md:grid-cols-4">
+          <div className="flex flex-wrap gap-4">
 
-    <div>
-      <p className="text-slate-500">
-        Status
-      </p>
+            <Link
+              href="/admin/issues"
+              className="rounded bg-[#1E2D5A] px-6 py-3 text-white hover:bg-blue-900"
+            >
+              New / Edit Issue
+            </Link>
 
-      <p className="text-3xl font-bold text-orange-600">
-        Draft
-      </p>
-    </div>
+            <Link
+              href="/admin/articles"
+              className="rounded bg-[#F52B3A] px-6 py-3 text-white hover:bg-red-600"
+            >
+              Add / Edit Articles
+            </Link>
 
-    <div>
-      <p className="text-slate-500">
-        Active Subscribers
-      </p>
+            <Link
+              href="/admin/polls"
+              className="rounded bg-slate-700 px-6 py-3 text-white hover:bg-slate-800"
+            >
+              Create / Edit Polls
+            </Link>
 
-      <p className="text-3xl font-bold">
-        {subscriberCount ?? 0}
-      </p>
-    </div>
+            <Link
+              href="/admin/subscribers"
+              className="rounded bg-purple-600 px-6 py-3 text-white hover:bg-purple-700"
+            >
+              Add / View Subscribers
+            </Link>
 
-    <div>
-      <p className="text-slate-500">
-        Current Issue
-      </p>
+            {latestIssue && paul && (
+              <Link
+                href={`https://asfp-newsletter.vercel.app/newsletter/${latestIssue.id}?u=${paul.unsubscribe_token}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded bg-green-600 px-6 py-3 text-white hover:bg-green-700"
+              >
+                Preview Newsletter
+              </Link>
+            )}
 
-      <p className="text-3xl font-bold">
-        #{latestIssue?.issue_number}
-      </p>
-    </div>
+            <Link
+              href="/admin/email"
+              className="rounded bg-orange-600 px-6 py-3 text-white hover:bg-orange-700"
+            >
+              Newsletter Campaign
+            </Link>
 
-    <div>
-      <p className="text-slate-500">
-        Last Campaign
-      </p>
+            <Link
+              href="/admin/email/create"
+              className="rounded bg-[#F52B3A] px-6 py-3 text-white hover:bg-red-600"
+            >
+              Create Email
+            </Link>
 
-      <p className="text-3xl font-bold text-slate-700">
-        Never Sent
-      </p>
-    </div>
+          </div>
 
-  </div>
+        </div>
 
-</div>
+        {/* CURRENT ISSUE & RECENT ARTICLES */}
 
+        <div className="mt-8 grid gap-6 lg:grid-cols-2">
 
-{/* QUICK ACTIONS */}
+          {/* CURRENT ISSUE */}
 
-<div className="mt-8 rounded-xl bg-white p-8 shadow">
+          <div className="rounded-xl bg-white p-8 shadow">
 
-  <h2 className="mb-6 text-2xl font-bold text-[#1E2D5A]">
-    Quick Actions
-  </h2>
+            <h2 className="mb-6 text-2xl font-bold text-[#1E2D5A]">
+              Current Issue
+            </h2>
 
-  <div className="flex flex-wrap gap-4">
+            {latestIssue ? (
 
-    <Link
-      href="/admin/issues"
-      className="rounded bg-[#1E2D5A] px-6 py-3 text-white hover:bg-blue-900"
-    >
-      New / Edit Issue
-    </Link>
+              <Link
+                href={`/newsletter/${latestIssue.id}`}
+                className="block rounded-lg border p-6 transition hover:bg-slate-50"
+              >
 
-    <Link
-      href="/admin/articles"
-      className="rounded bg-[#F52B3A] px-6 py-3 text-white hover:bg-red-600"
-    >
-      Add / Edit Articles
-    </Link>
+                <p className="text-2xl font-semibold">
+                  {latestIssue.title}
+                </p>
 
-    <Link
-      href="/admin/polls"
-      className="rounded bg-slate-700 px-6 py-3 text-white hover:bg-slate-800"
-    >
-      Create / Edit Polls
-    </Link>
+                <p className="mt-2 text-slate-600">
+                  Issue {latestIssue.issue_number}
+                </p>
 
-    <Link
-      href="/admin/subscribers"
-      className="rounded bg-purple-600 px-6 py-3 text-white hover:bg-purple-700"
-    >
-      Add / View Subscribers
-    </Link>
+                <p className="text-slate-600">
+                  {latestIssue.month} {latestIssue.year}
+                </p>
 
-{latestIssue && paul && (
-  <Link
-    href={`https://asfp-newsletter.vercel.app/newsletter/${latestIssue.id}?u=${paul.unsubscribe_token}`}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="rounded bg-green-600 px-6 py-3 text-white hover:bg-green-700"
-  >
-    Preview Newsletter
-  </Link>
-)}
+                <p className="mt-4 text-sm text-green-600">
+                  Click to preview newsletter →
+                </p>
 
-    <Link
-      href="/admin/email"
-      className="rounded bg-orange-600 px-6 py-3 text-white hover:bg-orange-700"
-    >
-      Email Campaign
-    </Link>
+              </Link>
 
-  </div>
+            ) : (
 
-</div>
+              <p className="text-slate-500">
+                No newsletter issue created.
+              </p>
 
-{/* CURRENT ISSUE & RECENT ARTICLES */}
+            )}
 
-<div className="mt-8 grid gap-6 lg:grid-cols-2">
+          </div>
 
-  <div className="rounded-xl bg-white p-8 shadow">
+          {/* RECENT ARTICLES */}
 
-    <h2 className="mb-6 text-2xl font-bold text-[#1E2D5A]">
-      Current Issue
-    </h2>
+          <div className="rounded-xl bg-white p-8 shadow">
 
-    {latestIssue ? (
+            <h2 className="mb-6 text-2xl font-bold text-[#1E2D5A]">
+              Recent Articles
+            </h2>
 
-      <Link
-        href={`/newsletter/${latestIssue.id}`}
-        className="block rounded-lg border p-6 transition hover:bg-slate-50"
-      >
+            {recentArticles.length === 0 && (
+              <p className="text-slate-500">
+                No articles created yet.
+              </p>
+            )}
 
-        <p className="text-2xl font-semibold">
-          {latestIssue.title}
-        </p>
+            {recentArticles.map((article) => (
+              <div
+                key={article.id}
+                className="mb-4 border-b pb-4 last:border-b-0"
+              >
 
-        <p className="mt-2 text-slate-600">
-          Issue {latestIssue.issue_number}
-        </p>
+                <p className="font-semibold">
+                  {article.title}
+                </p>
 
-        <p className="text-slate-600">
-          {latestIssue.month} {latestIssue.year}
-        </p>
+                <p className="text-sm text-slate-500">
+                  {article.author}
+                </p>
 
-        <p className="mt-4 text-sm text-green-600">
-          Click to preview newsletter →
-        </p>
+                <p className="text-sm text-red-500">
+                  {article.category}
+                </p>
 
-      </Link>
+              </div>
+            ))}
 
-    ) : (
-      <p className="text-slate-500">
-        No newsletter issue created.
-      </p>
-    )}
+          </div>
 
-  </div>
-
-  <div className="rounded-xl bg-white p-8 shadow">
-
-    <h2 className="mb-6 text-2xl font-bold text-[#1E2D5A]">
-      Recent Articles
-    </h2>
-
-    {recentArticles.length === 0 && (
-      <p className="text-slate-500">
-        No articles created yet.
-      </p>
-    )}
-
-    {recentArticles.map((article) => (
-      <div
-        key={article.id}
-        className="mb-4 border-b pb-4 last:border-b-0"
-      >
-        <p className="font-semibold">
-          {article.title}
-        </p>
-
-        <p className="text-sm text-slate-500">
-          {article.author}
-        </p>
-
-        <p className="text-sm text-red-500">
-          {article.category}
-        </p>
-      </div>
-    ))}
-
-  </div>
-
-</div>
+        </div>
 
       </main>
 

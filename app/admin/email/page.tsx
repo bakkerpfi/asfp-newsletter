@@ -37,6 +37,7 @@ export default async function EmailPage() {
   ]);
 
   const latestIssue = latestIssueResult.data;
+
   const subscriberCount =
     subscriberCountResult.count ?? 0;
 
@@ -66,6 +67,8 @@ export default async function EmailPage() {
         ) : (
           <>
 
+            {/* CURRENT NEWSLETTER */}
+
             <div className="mt-8 rounded-xl bg-white p-8 shadow">
 
               <h2 className="text-2xl font-bold">
@@ -86,7 +89,9 @@ export default async function EmailPage() {
 
               <div className="mt-6 rounded border bg-slate-50 p-6">
 
-                <strong>Email Subject</strong>
+                <strong>
+                  Email Subject
+                </strong>
 
                 <textarea
                   readOnly
@@ -99,7 +104,11 @@ export default async function EmailPage() {
 
             </div>
 
+            {/* CAMPAIGN DASHBOARD */}
+
             <CampaignDashboard />
+
+            {/* SUBSCRIBER SEARCH */}
 
             <SubscriberSearch
               subscribers={subscribers}
@@ -107,14 +116,18 @@ export default async function EmailPage() {
               websiteUrl={WEBSITE_URL}
             />
 
+            {/* SEND NEWSLETTER */}
+
             <div className="mt-8 rounded-xl border border-green-200 bg-green-50 p-8">
 
               <h2 className="text-2xl font-bold text-green-800">
-                Send Campaign
+                Send Newsletter
               </h2>
 
               <p className="mt-3 text-slate-700">
-                Send this newsletter to all active subscribers using personalised newsletter links.
+                Send the current newsletter issue to all
+                active subscribers using personalised
+                newsletter links.
               </p>
 
               <div className="mt-6">
@@ -122,9 +135,19 @@ export default async function EmailPage() {
               </div>
 
               <div className="mt-6 rounded-lg bg-white p-4 text-sm text-slate-600">
-                <p>✓ Personalised newsletter links</p>
-                <p>✓ One-click unsubscribe</p>
-                <p>✓ Individual subscriber tracking</p>
+
+                <p>
+                  ✓ Personalised newsletter links
+                </p>
+
+                <p>
+                  ✓ One-click unsubscribe
+                </p>
+
+                <p>
+                  ✓ Individual subscriber tracking
+                </p>
+
               </div>
 
             </div>
