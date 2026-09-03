@@ -1,9 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Props = {
   subscriberCount: number;
+};
+
+type CampaignResult = {
+  success?: boolean;
+  complete?: boolean;
+  campaignId?: number;
+  totalSubscribers?: number;
+  alreadySent?: number;
+  sent?: number;
+  failed?: number;
+  remaining?: number;
+  error?: string;
+  details?: string;
 };
 
 export default function SendAnnouncement({
@@ -41,12 +54,100 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
 
   const [proofEmail, setProofEmail] = useState("");
 
-  const [sendingProof, setSendingProof] = useState(false);
-  const [sendingAll, setSendingAll] = useState(false);
+  const [sendingProof, setSendingProof] =
+    useState(false);
+
+  const [sendingAll, setSendingAll] =
+    useState(false);
+
+  const [campaignId, setCampaignId] =
+    useState<number | null>(null);
+
+  const [campaignResult, setCampaignResult] =
+    useState<CampaignResult | null>(null);
+
+  const [checkingCampaign, setCheckingCampaign] =
+    useState(true);
+
+  // -----------------------------------------
+  // CHECK FOR INCOMPLETE CAMPAIGN
+  // -----------------------------------------
+
+  useEffect(() => {
+    async function checkForIncompleteCampaign() {
+      try {
+        const response = await fetch(
+          "/api/announcement-campaign/status",
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          console.error(
+            "Unable to check announcement campaign:",
+            result.error
+          );
+          return;
+        }
+
+        if (!result.campaign) {
+          return;
+        }
+
+        const campaign = result.campaign;
+
+        /*
+         * Restore the exact content belonging
+         * to the unfinished campaign.
+         */
+        setCampaignId(Number(campaign.id));
+
+        setSubject(campaign.subject || "");
+        setHeading(campaign.heading || "");
+        setContent(campaign.content || "");
+        setButtonText(campaign.buttonText || "");
+        setButtonLink(campaign.buttonLink || "");
+
+        setCampaignResult({
+          success: true,
+          complete: false,
+          campaignId: Number(campaign.id),
+          totalSubscribers:
+            Number(campaign.totalSubscribers) || 0,
+          alreadySent:
+            Number(campaign.sent) || 0,
+          sent:
+            Number(campaign.sent) || 0,
+          failed: 0,
+          remaining:
+            Number(campaign.remaining) || 0,
+        });
+      } catch (error) {
+        console.error(
+          "Unable to check for incomplete announcement campaign:",
+          error
+        );
+      } finally {
+        setCheckingCampaign(false);
+      }
+    }
+
+    checkForIncompleteCampaign();
+  }, []);
+
+  // -----------------------------------------
+  // SEND PROOF
+  // -----------------------------------------
 
   async function sendProof() {
     if (!proofEmail.trim()) {
-      alert("Please enter a proof email address.");
+      alert(
+        "Please enter a proof email address."
+      );
       return;
     }
 
@@ -58,7 +159,8 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
           body: JSON.stringify({
             subject,
@@ -66,15 +168,20 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
             content,
             buttonText,
             buttonLink,
-            proofEmail: proofEmail.trim(),
+            proofEmail:
+              proofEmail.trim(),
             sendToAll: false,
           }),
         }
       );
 
-      const result = await response.json();
+      const result =
+        await response.json();
 
-      if (!response.ok || !result.success) {
+      if (
+        !response.ok ||
+        !result.success
+      ) {
         alert(
           result.error ||
             "Failed to send proof email."
@@ -87,27 +194,42 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
       );
     } catch (error) {
       console.error(error);
-      alert("Failed to send proof email.");
+
+      alert(
+        "Failed to send proof email."
+      );
     } finally {
       setSendingProof(false);
     }
   }
 
+  // -----------------------------------------
+  // SEND / RESUME CAMPAIGN
+  // -----------------------------------------
+
   async function sendToAll() {
+    const isResume =
+      campaignId !== null;
+
     const confirmed = confirm(
-      `Are you sure you want to email this announcement to ALL ${subscriberCount} active subscribers?\n\nThis cannot be undone.`
+      isResume
+        ? `Resume campaign #${campaignId}?\n\nOnly subscribers not already recorded as sent will be processed.`
+        : `Are you sure you want to email this announcement to ALL ${subscriberCount} active subscribers?\n\nThis cannot be undone.`
     );
 
     if (!confirmed) {
       return;
     }
 
-    const secondConfirmation = confirm(
-      `FINAL CONFIRMATION\n\nSend "${subject}" to ${subscriberCount} active subscribers now?`
-    );
+    if (!isResume) {
+      const secondConfirmation =
+        confirm(
+          `FINAL CONFIRMATION\n\nSend "${subject}" to ${subscriberCount} active subscribers now?`
+        );
 
-    if (!secondConfirmation) {
-      return;
+      if (!secondConfirmation) {
+        return;
+      }
     }
 
     setSendingAll(true);
@@ -118,7 +240,8 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
           body: JSON.stringify({
             subject,
@@ -127,26 +250,91 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
             buttonText,
             buttonLink,
             sendToAll: true,
+            campaignId,
           }),
         }
       );
 
-      const result = await response.json();
+      const result: CampaignResult =
+        await response.json();
 
-      if (!response.ok || !result.success) {
-        alert(
-          result.error ||
-            "Failed to send announcement."
+      /*
+       * If the API created a campaign,
+       * retain its ID even if the send
+       * did not fully complete.
+       */
+      if (result.campaignId) {
+        setCampaignId(
+          Number(result.campaignId)
         );
+      }
+
+      setCampaignResult(result);
+
+      if (!response.ok) {
+        alert(
+          `${result.error || "Campaign interrupted."}\n\n` +
+            `${
+              result.campaignId
+                ? `Campaign ID: ${result.campaignId}\n`
+                : ""
+            }` +
+            `${
+              result.sent !== undefined
+                ? `Sent this attempt: ${result.sent}\n`
+                : ""
+            }` +
+            `${
+              result.remaining !== undefined
+                ? `Remaining: ${result.remaining}`
+                : ""
+            }`
+        );
+
+        return;
+      }
+
+      if (
+        result.complete &&
+        result.remaining === 0
+      ) {
+        alert(
+          `Announcement campaign complete!\n\n` +
+            `Campaign ID: ${result.campaignId}\n` +
+            `Active Subscribers: ${result.totalSubscribers ?? subscriberCount}\n` +
+            `Already Sent: ${result.alreadySent ?? 0}\n` +
+            `Sent This Attempt: ${result.sent ?? 0}\n` +
+            `Failed: ${result.failed ?? 0}\n` +
+            `Remaining: 0`
+        );
+
         return;
       }
 
       alert(
-        `Announcement complete!\n\nSent: ${result.sent}\nFailed: ${result.failed?.length ?? 0}`
+        `Campaign did not fully complete.\n\n` +
+          `Campaign ID: ${result.campaignId ?? "-"}\n` +
+          `Sent This Attempt: ${result.sent ?? 0}\n` +
+          `Failed: ${result.failed ?? 0}\n` +
+          `Remaining: ${result.remaining ?? "Unknown"}\n\n` +
+          `You can safely use Resume Campaign.`
       );
     } catch (error) {
       console.error(error);
-      alert("Failed to send announcement.");
+
+      /*
+       * The browser may lose the HTTP
+       * response even though the server
+       * processed part of the campaign.
+       *
+       * Refreshing the page will check
+       * Supabase for an unfinished campaign.
+       */
+      alert(
+        campaignId
+          ? `The connection was interrupted.\n\nCampaign #${campaignId} is retained. Refresh the page to check its current status before resuming.`
+          : `The connection was interrupted before a campaign result was returned.\n\nDo NOT press Send Announcement again. Refresh this page first so the system can check for an unfinished campaign.`
+      );
     } finally {
       setSendingAll(false);
     }
@@ -154,7 +342,9 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
 
   const paragraphs = content
     .split(/\n\s*\n/)
-    .filter((paragraph) => paragraph.trim());
+    .filter((paragraph) =>
+      paragraph.trim()
+    );
 
   return (
     <div className="mt-8">
@@ -176,6 +366,7 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
           </div>
 
           <div className="rounded-lg bg-white px-4 py-3 shadow-sm">
+
             <p className="text-sm text-slate-500">
               Active Subscribers
             </p>
@@ -183,6 +374,7 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
             <p className="text-2xl font-bold text-[#1E2D5A]">
               {subscriberCount}
             </p>
+
           </div>
 
         </div>
@@ -197,8 +389,13 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
             <input
               type="text"
               value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="mt-2 w-full rounded border bg-white p-3"
+              onChange={(e) =>
+                setSubject(
+                  e.target.value
+                )
+              }
+              disabled={campaignId !== null}
+              className="mt-2 w-full rounded border bg-white p-3 disabled:cursor-not-allowed disabled:bg-slate-100"
             />
           </div>
 
@@ -210,8 +407,13 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
             <input
               type="text"
               value={heading}
-              onChange={(e) => setHeading(e.target.value)}
-              className="mt-2 w-full rounded border bg-white p-3"
+              onChange={(e) =>
+                setHeading(
+                  e.target.value
+                )
+              }
+              disabled={campaignId !== null}
+              className="mt-2 w-full rounded border bg-white p-3 disabled:cursor-not-allowed disabled:bg-slate-100"
             />
           </div>
 
@@ -222,13 +424,20 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
 
             <textarea
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) =>
+                setContent(
+                  e.target.value
+                )
+              }
               rows={16}
-              className="mt-2 w-full rounded border bg-white p-3"
+              disabled={campaignId !== null}
+              className="mt-2 w-full rounded border bg-white p-3 disabled:cursor-not-allowed disabled:bg-slate-100"
             />
 
             <p className="mt-2 text-sm text-slate-500">
-              Separate paragraphs with a blank line.
+              {campaignId
+                ? "This content is locked because an unfinished campaign is being recovered."
+                : "Separate paragraphs with a blank line."}
             </p>
           </div>
 
@@ -243,9 +452,12 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
                 type="text"
                 value={buttonText}
                 onChange={(e) =>
-                  setButtonText(e.target.value)
+                  setButtonText(
+                    e.target.value
+                  )
                 }
-                className="mt-2 w-full rounded border bg-white p-3"
+                disabled={campaignId !== null}
+                className="mt-2 w-full rounded border bg-white p-3 disabled:cursor-not-allowed disabled:bg-slate-100"
               />
             </div>
 
@@ -258,9 +470,12 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
                 type="url"
                 value={buttonLink}
                 onChange={(e) =>
-                  setButtonLink(e.target.value)
+                  setButtonLink(
+                    e.target.value
+                  )
                 }
-                className="mt-2 w-full rounded border bg-white p-3"
+                disabled={campaignId !== null}
+                className="mt-2 w-full rounded border bg-white p-3 disabled:cursor-not-allowed disabled:bg-slate-100"
               />
             </div>
 
@@ -292,11 +507,9 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
 
         </div>
 
-        {/* EMAIL CLIENT STYLE WRAPPER */}
-
         <div className="overflow-hidden rounded-xl border bg-slate-100">
 
-          {/* SUBJECT PREVIEW */}
+          {/* SUBJECT */}
 
           <div className="border-b bg-white px-6 py-4">
 
@@ -305,7 +518,8 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
             </p>
 
             <p className="mt-1 font-semibold text-slate-800">
-              {subject || "Email subject"}
+              {subject ||
+                "Email subject"}
             </p>
 
           </div>
@@ -314,12 +528,13 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
 
             <div className="mx-auto max-w-[700px] overflow-hidden rounded-lg bg-white shadow">
 
-              {/* ASFP BLUE BANNER */}
+              {/* ASFP BANNER */}
 
               <div
                 className="border-b-4 border-[#F52B3A] px-8 py-5 text-center"
                 style={{
-                  backgroundColor: "#1E2D5A",
+                  backgroundColor:
+                    "#1E2D5A",
                 }}
               >
 
@@ -327,7 +542,8 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
                   src="/AustraliaNewZealand-02.png"
                   alt="ASFP Australia & New Zealand"
                   style={{
-                    display: "block",
+                    display:
+                      "block",
                     width: "140px",
                     maxWidth: "100%",
                     height: "auto",
@@ -353,15 +569,25 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
 
                 <div className="text-base leading-7 text-slate-700">
 
-                  {paragraphs.length > 0 ? (
-                    paragraphs.map((paragraph, index) => (
-                      <p
-                        key={index}
-                        className="mb-5"
-                      >
-                        {paragraph}
-                      </p>
-                    ))
+                  {paragraphs.length >
+                  0 ? (
+                    paragraphs.map(
+                      (
+                        paragraph,
+                        index
+                      ) => (
+                        <p
+                          key={
+                            index
+                          }
+                          className="mb-5"
+                        >
+                          {
+                            paragraph
+                          }
+                        </p>
+                      )
+                    )
                   ) : (
                     <p className="italic text-slate-400">
                       Your announcement content will appear here.
@@ -370,31 +596,34 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
 
                 </div>
 
-                {buttonText && buttonLink && (
-                  <div className="mt-8">
+                {buttonText &&
+                  buttonLink && (
+                    <div className="mt-8">
 
-                    <a
-                      href={buttonLink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-block rounded-md bg-[#F52B3A] px-6 py-4 font-bold text-white no-underline"
-                    >
-                      {buttonText}
-                    </a>
+                      <a
+                        href={
+                          buttonLink
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-block rounded-md bg-[#F52B3A] px-6 py-4 font-bold text-white no-underline"
+                      >
+                        {
+                          buttonText
+                        }
+                      </a>
 
-                  </div>
-                )}
+                    </div>
+                  )}
 
               </div>
 
-              {/* EMAIL FOOTER */}
+              {/* FOOTER */}
 
               <div className="border-t bg-slate-50 px-8 py-6 text-xs leading-5 text-slate-500">
 
                 <p>
-                  You are receiving this email because you are
-                  subscribed to ASFP Australia & New Zealand
-                  industry updates.
+                  You are receiving this email because you are subscribed to ASFP Australia & New Zealand industry updates.
                 </p>
 
                 <p className="mt-3 underline">
@@ -425,8 +654,7 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
         </h3>
 
         <p className="mt-2 text-sm text-slate-600">
-          Send a proof before sending the announcement to
-          the full subscriber list.
+          Send a proof before sending the announcement to the full subscriber list.
         </p>
 
         <div className="mt-4 flex flex-col gap-3 md:flex-row">
@@ -435,7 +663,9 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
             type="email"
             value={proofEmail}
             onChange={(e) =>
-              setProofEmail(e.target.value)
+              setProofEmail(
+                e.target.value
+              )
             }
             placeholder="Proof recipient email"
             className="flex-1 rounded border p-3"
@@ -444,7 +674,12 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
           <button
             type="button"
             onClick={sendProof}
-            disabled={sendingProof || sendingAll}
+            disabled={
+              checkingCampaign ||
+              sendingProof ||
+              sendingAll ||
+              campaignId !== null
+            }
             className="rounded bg-green-700 px-6 py-3 font-semibold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {sendingProof
@@ -454,35 +689,136 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
 
         </div>
 
+        {campaignId && (
+          <p className="mt-3 text-sm font-semibold text-orange-700">
+            Proof sending is disabled while an unfinished campaign is being recovered.
+          </p>
+        )}
+
       </div>
 
-      {/* SEND TO ALL */}
+      {/* CAMPAIGN RESULT */}
+
+      {campaignResult && (
+        <div className="mt-8 rounded-xl border bg-white p-6 shadow">
+
+          <h3 className="text-xl font-bold text-[#1E2D5A]">
+            Campaign Status
+          </h3>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-4">
+
+            <div>
+              <p className="text-sm text-slate-500">
+                Campaign
+              </p>
+
+              <p className="text-xl font-bold">
+                #
+                {campaignResult.campaignId ??
+                  "-"}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-500">
+                Sent
+              </p>
+
+              <p className="text-xl font-bold text-green-700">
+                {campaignResult.sent ??
+                  0}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-500">
+                Failed
+              </p>
+
+              <p className="text-xl font-bold text-red-600">
+                {campaignResult.failed ??
+                  0}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-500">
+                Remaining
+              </p>
+
+              <p className="text-xl font-bold text-orange-600">
+                {campaignResult.remaining ??
+                  0}
+              </p>
+            </div>
+
+          </div>
+
+          {campaignId &&
+            !campaignResult.complete && (
+              <div className="mt-5 rounded-lg bg-orange-50 p-4 text-sm text-orange-800">
+                An unfinished campaign has been detected.
+                The original announcement has been restored and
+                locked. Resume this campaign rather than starting
+                another send.
+              </div>
+            )}
+
+        </div>
+      )}
+
+      {/* SEND / RESUME */}
 
       <div className="mt-8 rounded-xl border border-red-200 bg-red-50 p-6">
 
         <h3 className="text-xl font-bold text-red-700">
-          Send Announcement
+          {campaignId
+            ? "Resume Announcement"
+            : "Send Announcement"}
         </h3>
 
-        <p className="mt-2 text-slate-700">
-          This will send the announcement to all{" "}
-          <strong>
-            {subscriberCount} active subscribers
-          </strong>.
-        </p>
+        {campaignId ? (
+          <p className="mt-2 text-slate-700">
+            Campaign{" "}
+            <strong>
+              #{campaignId}
+            </strong>{" "}
+            can be safely resumed. Subscribers already recorded
+            as sent will be skipped.
+          </p>
+        ) : (
+          <>
+            <p className="mt-2 text-slate-700">
+              This will send the announcement to all{" "}
+              <strong>
+                {subscriberCount} active subscribers
+              </strong>.
+            </p>
 
-        <p className="mt-2 text-sm font-semibold text-red-600">
-          Send and approve a proof email before using this button.
-        </p>
+            <p className="mt-2 text-sm font-semibold text-red-600">
+              Send and approve a proof email before using this button.
+            </p>
+          </>
+        )}
 
         <button
           type="button"
           onClick={sendToAll}
-          disabled={sendingProof || sendingAll}
+          disabled={
+            checkingCampaign ||
+            sendingProof ||
+            sendingAll ||
+            campaignResult?.complete === true
+          }
           className="mt-5 rounded bg-red-600 px-6 py-3 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {sendingAll
-            ? "Sending Announcement..."
+          {checkingCampaign
+            ? "Checking Campaign Status..."
+            : sendingAll
+            ? "Sending..."
+            : campaignId
+            ? `Resume Campaign #${campaignId}`
             : `Send to All ${subscriberCount} Active Subscribers`}
         </button>
 

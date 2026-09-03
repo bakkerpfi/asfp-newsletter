@@ -3,10 +3,6 @@ import { Resend } from "resend";
 import { supabase } from "@/lib/supabase";
 import { buildRecovery } from "@/lib/campaign-recovery";
 
-console.log(
-  "RESEND KEY:",
-  process.env.RESEND_API_KEY?.substring(0, 12)
-);
 
 const resend = new Resend(
   process.env.RESEND_API_KEY
