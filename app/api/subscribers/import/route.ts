@@ -1,108 +1,256 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
+const DATABASE_PAGE_SIZE = 1000;
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const uploadedSubscribers = body.subscribers ?? [];
+    const uploadedSubscribers =
+      Array.isArray(body.subscribers)
+        ? body.subscribers
+        : [];
 
-    // Load all existing emails
-    const { data: existing } = await supabase
+    // -----------------------------------------
+    // LOAD ALL EXISTING SUBSCRIBER EMAILS
+    // -----------------------------------------
+
+    const {
+      count,
+      error: countError,
+    } = await supabase
       .from("subscribers")
-      .select("email");
+      .select("*", {
+        count: "exact",
+        head: true,
+      });
 
-    const existingEmails = new Set(
-      (existing ?? []).map((s: any) =>
-        String(s.email).trim().toLowerCase()
-      )
-    );
+    if (countError) {
+      throw countError;
+    }
 
-    const spreadsheetEmails = new Set<string>();
+    const existingEmails =
+      new Set<string>();
 
-    const subscribersToImport: any[] = [];
+    for (
+      let from = 0;
+      from < (count ?? 0);
+      from += DATABASE_PAGE_SIZE
+    ) {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("subscribers")
+        .select("email")
+        .order("id", {
+          ascending: true,
+        })
+        .range(
+          from,
+          from +
+            DATABASE_PAGE_SIZE -
+            1
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      for (const subscriber of data ?? []) {
+        const email =
+          String(
+            subscriber.email ?? ""
+          )
+            .trim()
+            .toLowerCase();
+
+        if (email) {
+          existingEmails.add(email);
+        }
+      }
+    }
+
+    // -----------------------------------------
+    // PROCESS UPLOADED SPREADSHEET
+    // -----------------------------------------
+
+    const spreadsheetEmails =
+      new Set<string>();
+
+    const subscribersToImport: any[] =
+      [];
 
     let skippedExisting = 0;
     let skippedDuplicate = 0;
     let skippedInvalid = 0;
 
-    for (const s of uploadedSubscribers) {
-      const email = String(s.email ?? "")
-        .trim()
-        .toLowerCase();
+    const emailPattern =
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-      if (!email || !email.includes("@")) {
+    for (const s of uploadedSubscribers) {
+      const email =
+        String(s.email ?? "")
+          .trim()
+          .toLowerCase();
+
+      const name =
+        String(s.name ?? "")
+          .trim();
+
+      const company =
+        String(s.company ?? "")
+          .trim();
+
+      const memberType =
+        String(
+          s.member_type ??
+            "Industry"
+        ).trim();
+
+      // ---------------------------------------
+      // INVALID EMAIL
+      // ---------------------------------------
+
+      if (
+        !email ||
+        !emailPattern.test(email)
+      ) {
         skippedInvalid++;
         continue;
       }
 
-      // Duplicate inside spreadsheet
-      if (spreadsheetEmails.has(email)) {
+      // ---------------------------------------
+      // DUPLICATE INSIDE SPREADSHEET
+      // ---------------------------------------
+
+      if (
+        spreadsheetEmails.has(email)
+      ) {
         skippedDuplicate++;
         continue;
       }
 
       spreadsheetEmails.add(email);
 
-      // Already exists in Supabase
-if (existingEmails.has(email)) {
-  console.log("EXISTS:", email);
-  skippedExisting++;
-  continue;
-}
+      // ---------------------------------------
+      // ALREADY EXISTS IN SUPABASE
+      // ---------------------------------------
 
-console.log("IMPORT:", email);
+      if (
+        existingEmails.has(email)
+      ) {
+        skippedExisting++;
+        continue;
+      }
 
       subscribersToImport.push({
-        name: s.name,
-        company: s.company,
+        name:
+          name || null,
+
+        company:
+          company || null,
+
         email,
-        member_type: s.member_type ?? "Industry",
+
+        member_type:
+          memberType || "Industry",
+
+        active: true,
       });
     }
 
-    console.log("Spreadsheet received:", uploadedSubscribers.length);
-console.log("Subscribers to import:", subscribersToImport.length);
-console.log("Already existing:", skippedExisting);
-console.log("Duplicates:", skippedDuplicate);
-console.log("Invalid:", skippedInvalid);
+    // -----------------------------------------
+    // IMPORT SUBSCRIBERS
+    // -----------------------------------------
 
     let imported = 0;
 
-// Import subscribers one at a time
-for (const subscriber of subscribersToImport) {
+    let skippedDatabaseDuplicate =
+      0;
 
-  const { error } = await supabase
-    .from("subscribers")
-    .insert(subscriber);
+    let failed = 0;
 
-  if (error) {
-    console.log("Skipped:", subscriber.email);
-    console.log(error);
-    continue;
-  }
+    for (
+      const subscriber
+      of subscribersToImport
+    ) {
+      const {
+        error,
+      } = await supabase
+        .from("subscribers")
+        .insert(subscriber);
 
-  imported++;
-}
+      if (error) {
+        // Duplicate caught by database
+        if (
+          error.code === "23505"
+        ) {
+          skippedDatabaseDuplicate++;
+          continue;
+        }
+
+        console.error(
+          "IMPORT SUBSCRIBER ERROR:",
+          subscriber.email,
+          error
+        );
+
+        failed++;
+        continue;
+      }
+
+      imported++;
+
+      // Add immediately so the same
+      // email cannot be re-imported later
+      // in this request.
+      existingEmails.add(
+        subscriber.email
+      );
+    }
+
+    // -----------------------------------------
+    // RESULT
+    // -----------------------------------------
 
     return NextResponse.json({
       success: true,
+
       imported,
+
       skippedExisting,
+
       skippedDuplicate,
+
       skippedInvalid,
-      totalRows: uploadedSubscribers.length,
+
+      skippedDatabaseDuplicate,
+
+      failed,
+
+      totalRows:
+        uploadedSubscribers.length,
+
       totalSubscribers:
-        existingEmails.size + imported,
+        existingEmails.size,
     });
 
   } catch (error) {
-    console.error(error);
+    console.error(
+      "SUBSCRIBER IMPORT ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
         success: false,
-        error: String(error),
+
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
       },
       {
         status: 500,

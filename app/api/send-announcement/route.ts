@@ -496,33 +496,62 @@ export async function POST(
         );
       }
 
-      const {
-        data: subscriber,
-        error,
-      } = await supabase
-        .from("subscribers")
-        .select(
-          "id,name,email,unsubscribe_token"
-        )
-        .ilike(
-          "email",
-          proofEmail.trim()
-        )
-        .single();
+const cleanProofEmail = proofEmail
+  .trim()
+  .toLowerCase();
 
-      if (
-        error ||
-        !subscriber
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Proof email must belong to an existing subscriber.",
-          },
-          { status: 404 }
-        );
-      }
+const {
+  data: subscribers,
+  error,
+} = await supabase
+  .from("subscribers")
+  .select(
+    "id,name,email,unsubscribe_token,active"
+  )
+  .ilike(
+    "email",
+    cleanProofEmail
+  );
+
+if (error) {
+  console.error(
+    "PROOF SUBSCRIBER LOOKUP ERROR:",
+    error
+  );
+
+  return NextResponse.json(
+    {
+      success: false,
+      error:
+        `Subscriber lookup failed: ${error.message}`,
+    },
+    { status: 500 }
+  );
+}
+
+if (!subscribers || subscribers.length === 0) {
+  return NextResponse.json(
+    {
+      success: false,
+      error:
+        `No subscriber found for ${cleanProofEmail}.`,
+    },
+    { status: 404 }
+  );
+}
+
+if (subscribers.length > 1) {
+  return NextResponse.json(
+    {
+      success: false,
+      error:
+        `More than one subscriber record exists for ${cleanProofEmail}. Please remove the duplicate.`,
+    },
+    { status: 409 }
+  );
+}
+
+const subscriber = subscribers[0];
 
       const html =
         createEmailHtml({
