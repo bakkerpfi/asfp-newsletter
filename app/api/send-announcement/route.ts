@@ -932,6 +932,10 @@ const subscriber = subscribers[0];
         );
 
       if (resendError) {
+        console.error(
+  "RESEND BATCH ERROR:",
+  resendError
+);
         failed +=
           subscriberBatch.length;
 
