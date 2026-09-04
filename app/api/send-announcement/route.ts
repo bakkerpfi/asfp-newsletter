@@ -288,9 +288,6 @@ async function loadActiveSubscribers() {
     );
   }
 
-  // One email address receives one copy.
-  // Keep the highest subscriber ID
-  // deterministically for duplicate addresses.
   return Array.from(
     new Map(
       subscribers
@@ -602,14 +599,9 @@ export async function POST(
     // -----------------------------------------
 
     let currentCampaignId: number;
-
     let campaignContent: CampaignContent;
 
     if (campaignId) {
-      // ---------------------------------------
-      // RESUME EXISTING CAMPAIGN
-      // ---------------------------------------
-
       currentCampaignId =
         Number(campaignId);
 
@@ -710,10 +702,6 @@ export async function POST(
         );
       }
     } else {
-      // ---------------------------------------
-      // CREATE NEW CAMPAIGN
-      // ---------------------------------------
-
       if (
         !subject ||
         !content
@@ -888,10 +876,8 @@ export async function POST(
             from: fromEmail,
             replyTo,
             to: subscriber.email,
-
             subject:
               campaignContent.subject,
-
             html:
               createEmailHtml({
                 subscriber,
@@ -988,10 +974,61 @@ export async function POST(
           reason,
         });
 
-        // Continue to the next batch.
-        // Failed subscribers are NOT marked
+        // Save the failed batch against
+        // each subscriber with the reason.
+        const failedRecords =
+          subscriberBatch.map(
+            (subscriber) => ({
+              campaign_id:
+                currentCampaignId,
+
+              subscriber_id:
+                Number(
+                  subscriber.id
+                ),
+
+              email:
+                subscriber.email
+                  .trim()
+                  .toLowerCase(),
+
+              resend_id: null,
+
+              status: "failed",
+
+              error: reason,
+
+              sent_at: null,
+            })
+          );
+
+        const {
+          error:
+            failedTrackingError,
+        } = await supabase
+          .from(
+            "announcement_sends"
+          )
+          .upsert(
+            failedRecords,
+            {
+              onConflict:
+                "campaign_id,subscriber_id",
+            }
+          );
+
+        if (
+          failedTrackingError
+        ) {
+          console.error(
+            "FAILED SEND TRACKING ERROR:",
+            failedTrackingError
+          );
+        }
+
+        // Failed subscribers are not counted
         // as sent, so Resume Campaign can
-        // safely attempt them later.
+        // safely try them again later.
         continue;
       }
 
@@ -1006,15 +1043,6 @@ export async function POST(
         resendResults.length !==
         subscriberBatch.length
       ) {
-        /*
-         * Resend appears to have accepted the
-         * batch, but we cannot safely match
-         * every returned message ID.
-         *
-         * Stop here rather than risk duplicate
-         * emails on a retry.
-         */
-
         await supabase
           .from(
             "announcement_campaigns"
@@ -1094,15 +1122,6 @@ export async function POST(
         });
 
       if (trackingError) {
-        /*
-         * IMPORTANT:
-         *
-         * Resend already accepted this batch.
-         * Do not continue or automatically
-         * retry because that could result in
-         * duplicate emails.
-         */
-
         await supabase
           .from(
             "announcement_campaigns"
@@ -1144,7 +1163,6 @@ export async function POST(
       sent +=
         subscriberBatch.length;
 
-      // Slow down before the next batch.
       if (
         index +
           RESEND_BATCH_SIZE <
