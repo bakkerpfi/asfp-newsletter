@@ -8,9 +8,12 @@ const WEBSITE_URL =
   process.env.WEBSITE_URL ||
   "https://asfp-newsletter.vercel.app";
 
-const RESEND_BATCH_SIZE = 25;
+// Smaller batches + retry protection
+const RESEND_BATCH_SIZE = 10;
 const DATABASE_PAGE_SIZE = 1000;
-const BATCH_DELAY_MS = 1000;
+const BATCH_DELAY_MS = 1500;
+const MAX_BATCH_RETRIES = 3;
+const RETRY_DELAY_MS = 3000;
 
 type Subscriber = {
   id: number;
@@ -264,12 +267,6 @@ async function loadActiveSubscribers() {
         "id,name,email,unsubscribe_token"
       )
       .eq("active", true)
-
-      /*
-       * Order by ID so duplicate-email
-       * selection is deterministic between
-       * the original send and any resume.
-       */
       .order("id", {
         ascending: true,
       })
@@ -291,15 +288,9 @@ async function loadActiveSubscribers() {
     );
   }
 
-  /*
-   * One email address receives one copy.
-   *
-   * Map.set() replaces an earlier duplicate,
-   * so with ascending ID ordering the highest
-   * subscriber ID for an email is retained.
-   * Most importantly, this is deterministic
-   * on every run/resume.
-   */
+  // One email address receives one copy.
+  // Keep the highest subscriber ID
+  // deterministically for duplicate addresses.
   return Array.from(
     new Map(
       subscribers
@@ -496,62 +487,69 @@ export async function POST(
         );
       }
 
-const cleanProofEmail = proofEmail
-  .trim()
-  .toLowerCase();
+      const cleanProofEmail =
+        proofEmail
+          .trim()
+          .toLowerCase();
 
-const {
-  data: subscribers,
-  error,
-} = await supabase
-  .from("subscribers")
-  .select(
-    "id,name,email,unsubscribe_token,active"
-  )
-  .ilike(
-    "email",
-    cleanProofEmail
-  );
+      const {
+        data: subscribers,
+        error,
+      } = await supabase
+        .from("subscribers")
+        .select(
+          "id,name,email,unsubscribe_token,active"
+        )
+        .ilike(
+          "email",
+          cleanProofEmail
+        );
 
-if (error) {
-  console.error(
-    "PROOF SUBSCRIBER LOOKUP ERROR:",
-    error
-  );
+      if (error) {
+        console.error(
+          "PROOF SUBSCRIBER LOOKUP ERROR:",
+          error
+        );
 
-  return NextResponse.json(
-    {
-      success: false,
-      error:
-        `Subscriber lookup failed: ${error.message}`,
-    },
-    { status: 500 }
-  );
-}
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              `Subscriber lookup failed: ${error.message}`,
+          },
+          { status: 500 }
+        );
+      }
 
-if (!subscribers || subscribers.length === 0) {
-  return NextResponse.json(
-    {
-      success: false,
-      error:
-        `No subscriber found for ${cleanProofEmail}.`,
-    },
-    { status: 404 }
-  );
-}
+      if (
+        !subscribers ||
+        subscribers.length === 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              `No subscriber found for ${cleanProofEmail}.`,
+          },
+          { status: 404 }
+        );
+      }
 
-if (subscribers.length > 1) {
-  return NextResponse.json(
-    {
-      success: false,
-      error:
-        `More than one subscriber record exists for ${cleanProofEmail}. Please remove the duplicate.`,
-    },
-    { status: 409 }
-  );
-}
+      if (
+        subscribers.length > 1
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              `More than one subscriber record exists for ${cleanProofEmail}. Please remove the duplicate.`,
+          },
+          { status: 409 }
+        );
+      }
 
-const subscriber = subscribers[0];
+      const subscriber =
+        subscribers[0];
 
       const html =
         createEmailHtml({
@@ -575,6 +573,11 @@ const subscriber = subscribers[0];
         });
 
       if (resendError) {
+        console.error(
+          "PROOF RESEND ERROR:",
+          resendError
+        );
+
         return NextResponse.json(
           {
             success: false,
@@ -626,17 +629,6 @@ const subscriber = subscribers[0];
         );
       }
 
-      /*
-       * IMPORTANT:
-       *
-       * Do not trust the browser's subject,
-       * content or button values when
-       * resuming.
-       *
-       * The remaining recipients must
-       * receive the exact campaign stored
-       * when the original send started.
-       */
       const storedCampaign =
         await loadCampaign(
           currentCampaignId
@@ -698,10 +690,6 @@ const subscriber = subscribers[0];
         );
       }
 
-      /*
-       * Mark it as sending again while
-       * the recovery attempt is running.
-       */
       const {
         error: resumeStatusError,
       } = await supabase
@@ -901,10 +889,6 @@ const subscriber = subscribers[0];
             replyTo,
             to: subscriber.email,
 
-            /*
-             * Always use the content belonging
-             * to the stored campaign.
-             */
             subject:
               campaignContent.subject,
 
@@ -923,19 +907,75 @@ const subscriber = subscribers[0];
           })
         );
 
-      const {
-        data,
-        error: resendError,
-      } =
-        await resend.batch.send(
-          emails
+      // ---------------------------------------
+      // SEND BATCH WITH AUTOMATIC RETRIES
+      // ---------------------------------------
+
+      let batchData:
+        | { data?: ResendBatchResult[] }
+        | null = null;
+
+      let batchError:
+        | { message?: string }
+        | null = null;
+
+      for (
+        let attempt = 1;
+        attempt <= MAX_BATCH_RETRIES;
+        attempt++
+      ) {
+        const result =
+          await resend.batch.send(
+            emails
+          );
+
+        batchData =
+          result.data as
+            | {
+                data?: ResendBatchResult[];
+              }
+            | null;
+
+        batchError =
+          result.error;
+
+        if (!batchError) {
+          break;
+        }
+
+        console.error(
+          `RESEND BATCH ERROR - attempt ${attempt}/${MAX_BATCH_RETRIES}:`,
+          batchError
         );
 
-      if (resendError) {
+        if (
+          attempt <
+          MAX_BATCH_RETRIES
+        ) {
+          await delay(
+            RETRY_DELAY_MS
+          );
+        }
+      }
+
+      // ---------------------------------------
+      // BATCH STILL FAILED AFTER RETRIES
+      // ---------------------------------------
+
+      if (batchError) {
+        const reason =
+          batchError.message ||
+          "Unknown Resend error.";
+
         console.error(
-  "RESEND BATCH ERROR:",
-  resendError
-);
+          "RESEND BATCH FAILED AFTER RETRIES:",
+          reason,
+          subscriberBatch.map(
+            (subscriber) =>
+              subscriber.email
+          )
+        );
+
         failed +=
           subscriberBatch.length;
 
@@ -945,23 +985,21 @@ const subscriber = subscribers[0];
               (subscriber) =>
                 subscriber.email
             ),
-          reason:
-            resendError.message ||
-            "Unknown Resend error.",
+          reason,
         });
 
-        await delay(
-          BATCH_DELAY_MS
-        );
-
+        // Continue to the next batch.
+        // Failed subscribers are NOT marked
+        // as sent, so Resume Campaign can
+        // safely attempt them later.
         continue;
       }
 
       const resendResults =
         Array.isArray(
-          data?.data
+          batchData?.data
         )
-          ? (data.data as ResendBatchResult[])
+          ? batchData.data
           : [];
 
       if (
@@ -969,12 +1007,14 @@ const subscriber = subscribers[0];
         subscriberBatch.length
       ) {
         /*
-         * We do not know which messages
-         * Resend accepted, so stop.
+         * Resend appears to have accepted the
+         * batch, but we cannot safely match
+         * every returned message ID.
          *
-         * Do not automatically retry this
-         * batch.
+         * Stop here rather than risk duplicate
+         * emails on a retry.
          */
+
         await supabase
           .from(
             "announcement_campaigns"
@@ -1000,6 +1040,7 @@ const subscriber = subscribers[0];
             remaining:
               pendingSubscribers.length -
               sent,
+            failedBatches,
           },
           { status: 500 }
         );
@@ -1016,20 +1057,26 @@ const subscriber = subscribers[0];
           ) => ({
             campaign_id:
               currentCampaignId,
+
             subscriber_id:
               Number(
                 subscriber.id
               ),
+
             email:
               subscriber.email
                 .trim()
                 .toLowerCase(),
+
             resend_id:
               resendResults[
                 batchIndex
               ]?.id ?? null,
+
             status: "sent",
+
             error: null,
+
             sent_at: sentAt,
           })
         );
@@ -1048,10 +1095,14 @@ const subscriber = subscribers[0];
 
       if (trackingError) {
         /*
-         * Resend has already accepted these
-         * emails. We MUST stop because
-         * retrying could duplicate them.
+         * IMPORTANT:
+         *
+         * Resend already accepted this batch.
+         * Do not continue or automatically
+         * retry because that could result in
+         * duplicate emails.
          */
+
         await supabase
           .from(
             "announcement_campaigns"
@@ -1070,15 +1121,21 @@ const subscriber = subscribers[0];
             complete: false,
             campaignId:
               currentCampaignId,
+
             error:
               "Resend accepted a batch, but its send history could not be saved. Do not resend until this is checked.",
+
             details:
               trackingError.message,
+
             sent,
             failed,
+
             remaining:
               pendingSubscribers.length -
               sent,
+
+            failedBatches,
           },
           { status: 500 }
         );
@@ -1087,6 +1144,7 @@ const subscriber = subscribers[0];
       sent +=
         subscriberBatch.length;
 
+      // Slow down before the next batch.
       if (
         index +
           RESEND_BATCH_SIZE <
@@ -1119,6 +1177,7 @@ const subscriber = subscribers[0];
         status: complete
           ? "completed"
           : "partial",
+
         completed_at:
           complete
             ? new Date().toISOString()
@@ -1139,16 +1198,24 @@ const subscriber = subscribers[0];
       success:
         failed === 0 &&
         complete,
+
       complete,
+
       campaignId:
         currentCampaignId,
+
       totalSubscribers:
         subscribers.length,
+
       alreadySent:
         skipped,
+
       sent,
+
       failed,
+
       remaining,
+
       failedBatches,
     });
   } catch (error) {
@@ -1160,6 +1227,7 @@ const subscriber = subscribers[0];
     return NextResponse.json(
       {
         success: false,
+
         error:
           error instanceof Error
             ? error.message
