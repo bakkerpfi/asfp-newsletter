@@ -6,6 +6,11 @@ type Props = {
   subscriberCount: number;
 };
 
+type FailedBatch = {
+  emails: string[];
+  reason: string;
+};
+
 type CampaignResult = {
   success?: boolean;
   complete?: boolean;
@@ -17,7 +22,43 @@ type CampaignResult = {
   remaining?: number;
   error?: string;
   details?: string;
+  failedBatches?: FailedBatch[];
 };
+
+function getFailureSummary(
+  failedBatches?: FailedBatch[]
+) {
+  if (
+    !failedBatches ||
+    failedBatches.length === 0
+  ) {
+    return "";
+  }
+
+  const reasons = Array.from(
+    new Set(
+      failedBatches
+        .map((batch) => batch.reason)
+        .filter(Boolean)
+    )
+  );
+
+  if (reasons.length === 0) {
+    return "";
+  }
+
+  return (
+    "\n\nFailure reason" +
+    (reasons.length > 1 ? "s" : "") +
+    ":\n" +
+    reasons
+      .map(
+        (reason, index) =>
+          `${index + 1}. ${reason}`
+      )
+      .join("\n")
+  );
+}
 
 export default function SendAnnouncement({
   subscriberCount,
@@ -100,10 +141,6 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
 
         const campaign = result.campaign;
 
-        /*
-         * Restore the exact content belonging
-         * to the unfinished campaign.
-         */
         setCampaignId(Number(campaign.id));
 
         setSubject(campaign.subject || "");
@@ -125,6 +162,8 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
           failed: 0,
           remaining:
             Number(campaign.remaining) || 0,
+          failedBatches:
+            campaign.failedBatches || [],
         });
       } catch (error) {
         console.error(
@@ -258,11 +297,6 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
       const result: CampaignResult =
         await response.json();
 
-      /*
-       * If the API created a campaign,
-       * retain its ID even if the send
-       * did not fully complete.
-       */
       if (result.campaignId) {
         setCampaignId(
           Number(result.campaignId)
@@ -271,7 +305,16 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
 
       setCampaignResult(result);
 
+      // ---------------------------------------
+      // HARD API ERROR
+      // ---------------------------------------
+
       if (!response.ok) {
+        const failureSummary =
+          getFailureSummary(
+            result.failedBatches
+          );
+
         alert(
           `${result.error || "Campaign interrupted."}\n\n` +
             `${
@@ -285,14 +328,24 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
                 : ""
             }` +
             `${
+              result.failed !== undefined
+                ? `Failed: ${result.failed}\n`
+                : ""
+            }` +
+            `${
               result.remaining !== undefined
                 ? `Remaining: ${result.remaining}`
                 : ""
-            }`
+            }` +
+            failureSummary
         );
 
         return;
       }
+
+      // ---------------------------------------
+      // CAMPAIGN COMPLETE
+      // ---------------------------------------
 
       if (
         result.complete &&
@@ -311,25 +364,27 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
         return;
       }
 
+      // ---------------------------------------
+      // CAMPAIGN PARTIAL / FAILED
+      // ---------------------------------------
+
+      const failureSummary =
+        getFailureSummary(
+          result.failedBatches
+        );
+
       alert(
         `Campaign did not fully complete.\n\n` +
           `Campaign ID: ${result.campaignId ?? "-"}\n` +
           `Sent This Attempt: ${result.sent ?? 0}\n` +
           `Failed: ${result.failed ?? 0}\n` +
-          `Remaining: ${result.remaining ?? "Unknown"}\n\n` +
-          `You can safely use Resume Campaign.`
+          `Remaining: ${result.remaining ?? "Unknown"}` +
+          failureSummary +
+          `\n\nReview the failure reason before using Resume Campaign again.`
       );
     } catch (error) {
       console.error(error);
 
-      /*
-       * The browser may lose the HTTP
-       * response even though the server
-       * processed part of the campaign.
-       *
-       * Refreshing the page will check
-       * Supabase for an unfinished campaign.
-       */
       alert(
         campaignId
           ? `The connection was interrupted.\n\nCampaign #${campaignId} is retained. Refresh the page to check its current status before resuming.`
@@ -509,8 +564,6 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
 
         <div className="overflow-hidden rounded-xl border bg-slate-100">
 
-          {/* SUBJECT */}
-
           <div className="border-b bg-white px-6 py-4">
 
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -527,8 +580,6 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
           <div className="p-4 md:p-8">
 
             <div className="mx-auto max-w-[700px] overflow-hidden rounded-lg bg-white shadow">
-
-              {/* ASFP BANNER */}
 
               <div
                 className="border-b-4 border-[#F52B3A] px-8 py-5 text-center"
@@ -553,8 +604,6 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
 
               </div>
 
-              {/* EMAIL CONTENT */}
-
               <div className="p-8 md:p-10">
 
                 <p className="mb-6 text-base text-slate-800">
@@ -569,22 +618,17 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
 
                 <div className="text-base leading-7 text-slate-700">
 
-                  {paragraphs.length >
-                  0 ? (
+                  {paragraphs.length > 0 ? (
                     paragraphs.map(
                       (
                         paragraph,
                         index
                       ) => (
                         <p
-                          key={
-                            index
-                          }
+                          key={index}
                           className="mb-5"
                         >
-                          {
-                            paragraph
-                          }
+                          {paragraph}
                         </p>
                       )
                     )
@@ -601,24 +645,18 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
                     <div className="mt-8">
 
                       <a
-                        href={
-                          buttonLink
-                        }
+                        href={buttonLink}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-block rounded-md bg-[#F52B3A] px-6 py-4 font-bold text-white no-underline"
                       >
-                        {
-                          buttonText
-                        }
+                        {buttonText}
                       </a>
 
                     </div>
                   )}
 
               </div>
-
-              {/* FOOTER */}
 
               <div className="border-t bg-slate-50 px-8 py-6 text-xs leading-5 text-slate-500">
 
@@ -714,9 +752,7 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
               </p>
 
               <p className="text-xl font-bold">
-                #
-                {campaignResult.campaignId ??
-                  "-"}
+                #{campaignResult.campaignId ?? "-"}
               </p>
             </div>
 
@@ -726,8 +762,7 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
               </p>
 
               <p className="text-xl font-bold text-green-700">
-                {campaignResult.sent ??
-                  0}
+                {campaignResult.sent ?? 0}
               </p>
             </div>
 
@@ -737,8 +772,7 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
               </p>
 
               <p className="text-xl font-bold text-red-600">
-                {campaignResult.failed ??
-                  0}
+                {campaignResult.failed ?? 0}
               </p>
             </div>
 
@@ -748,12 +782,82 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
               </p>
 
               <p className="text-xl font-bold text-orange-600">
-                {campaignResult.remaining ??
-                  0}
+                {campaignResult.remaining ?? 0}
               </p>
             </div>
 
           </div>
+
+          {/* FAILURE DETAILS */}
+
+          {campaignResult.failedBatches &&
+            campaignResult.failedBatches.length > 0 && (
+              <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-5">
+
+                <h4 className="font-bold text-red-700">
+                  Failure Details
+                </h4>
+
+                <p className="mt-1 text-sm text-slate-600">
+                  These messages were not accepted by the email service.
+                  Review the reason before retrying them.
+                </p>
+
+                <div className="mt-4 space-y-4">
+
+                  {campaignResult.failedBatches.map(
+                    (batch, index) => (
+                      <div
+                        key={index}
+                        className="rounded border border-red-100 bg-white p-4"
+                      >
+
+                        <p className="font-semibold text-red-700">
+                          {batch.emails.length} failed recipient
+                          {batch.emails.length === 1
+                            ? ""
+                            : "s"}
+                        </p>
+
+                        <p className="mt-2 text-sm font-semibold text-slate-700">
+                          Reason:
+                        </p>
+
+                        <p className="mt-1 break-words text-sm text-slate-600">
+                          {batch.reason}
+                        </p>
+
+                        <details className="mt-3">
+
+                          <summary className="cursor-pointer text-sm font-semibold text-[#1E2D5A]">
+                            View email addresses
+                          </summary>
+
+                          <div className="mt-2 rounded bg-slate-50 p-3">
+
+                            {batch.emails.map(
+                              (email) => (
+                                <p
+                                  key={email}
+                                  className="break-all text-xs text-slate-600"
+                                >
+                                  {email}
+                                </p>
+                              )
+                            )}
+
+                          </div>
+
+                        </details>
+
+                      </div>
+                    )
+                  )}
+
+                </div>
+
+              </div>
+            )}
 
           {campaignId &&
             !campaignResult.complete && (
