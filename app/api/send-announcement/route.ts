@@ -8,9 +8,9 @@ const WEBSITE_URL =
   process.env.WEBSITE_URL ||
   "https://asfp-newsletter.vercel.app";
 
-const RESEND_BATCH_SIZE = 100;
+const RESEND_BATCH_SIZE = 25;
 const DATABASE_PAGE_SIZE = 1000;
-const BATCH_DELAY_MS = 300;
+const BATCH_DELAY_MS = 1000;
 
 type Subscriber = {
   id: number;
