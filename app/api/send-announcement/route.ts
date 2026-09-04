@@ -8,7 +8,7 @@ const WEBSITE_URL =
   process.env.WEBSITE_URL ||
   "https://asfp-newsletter.vercel.app";
 
-// Smaller batches + retry protection
+// Sending controls
 const RESEND_BATCH_SIZE = 10;
 const DATABASE_PAGE_SIZE = 1000;
 const BATCH_DELAY_MS = 1500;
@@ -34,6 +34,15 @@ type CampaignContent = {
   buttonLink: string;
 };
 
+type FailedBatch = {
+  emails: string[];
+  reason: string;
+};
+
+// -----------------------------------------
+// HELPERS
+// -----------------------------------------
+
 function delay(milliseconds: number) {
   return new Promise((resolve) =>
     setTimeout(resolve, milliseconds)
@@ -50,6 +59,134 @@ function escapeHtml(
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
+
+// -----------------------------------------
+// CLEAN EMAIL ADDRESS
+// -----------------------------------------
+
+function cleanEmailAddress(
+  value: string | null | undefined
+) {
+  let email = String(value ?? "");
+
+  /*
+   * NFKC converts common full-width Unicode
+   * characters to their normal ASCII equivalents.
+   *
+   * Example:
+   * ＠ becomes @
+   */
+  email = email.normalize("NFKC");
+
+  /*
+   * Remove invisible/control characters:
+   *
+   * - non-breaking spaces
+   * - zero-width spaces
+   * - byte-order marks
+   * - other control characters commonly introduced
+   *   when copying data from Excel/PDF/web pages.
+   */
+  email = email.replace(
+    /[\u0000-\u001F\u007F-\u009F\u00A0\u200B-\u200D\u2060\uFEFF]/g,
+    ""
+  );
+
+  /*
+   * Remove normal whitespace anywhere in the email.
+   */
+  email = email.replace(/\s+/g, "");
+
+  /*
+   * If an address has accidentally been stored as:
+   *
+   * Name <person@example.com>
+   *
+   * extract the actual address.
+   */
+  const angleBracketMatch =
+    email.match(/<([^<>]+)>/);
+
+  if (angleBracketMatch?.[1]) {
+    email = angleBracketMatch[1];
+  }
+
+  /*
+   * Remove common punctuation accidentally pasted
+   * onto the very end of an address.
+   *
+   * Example:
+   * shane@wingates.co.nz.
+   *
+   * becomes:
+   * shane@wingates.co.nz
+   */
+  email = email.replace(/[.,;:]+$/g, "");
+
+  return email
+    .trim()
+    .toLowerCase();
+}
+
+// -----------------------------------------
+// VALIDATE EMAIL
+// -----------------------------------------
+
+function isValidEmailAddress(
+  email: string
+) {
+  if (!email) {
+    return false;
+  }
+
+  /*
+   * Resend currently expects normal ASCII email
+   * addresses in the recipient field.
+   */
+  if (!/^[\x00-\x7F]+$/.test(email)) {
+    return false;
+  }
+
+  if (
+    email.length > 254 ||
+    email.startsWith("@") ||
+    email.endsWith("@")
+  ) {
+    return false;
+  }
+
+  const parts =
+    email.split("@");
+
+  if (parts.length !== 2) {
+    return false;
+  }
+
+  const [localPart, domain] =
+    parts;
+
+  if (
+    !localPart ||
+    !domain ||
+    localPart.length > 64
+  ) {
+    return false;
+  }
+
+  /*
+   * Practical validation for our newsletter list.
+   * This deliberately requires a normal domain with
+   * at least one dot.
+   */
+  const pattern =
+    /^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+$/i;
+
+  return pattern.test(email);
+}
+
+// -----------------------------------------
+// CREATE EMAIL HTML
+// -----------------------------------------
 
 function createEmailHtml({
   subscriber,
@@ -169,7 +306,8 @@ function createEmailHtml({
               </div>
 
               ${
-                buttonText && buttonLink
+                buttonText &&
+                buttonLink
                   ? `
                     <div style="
                       margin-top:30px;
@@ -230,6 +368,78 @@ function createEmailHtml({
 }
 
 // -----------------------------------------
+// RECORD FAILED SUBSCRIBERS
+// -----------------------------------------
+
+async function recordFailedSubscribers({
+  campaignId,
+  subscribers,
+  reason,
+}: {
+  campaignId: number;
+  subscribers: Subscriber[];
+  reason: string;
+}) {
+  if (
+    subscribers.length === 0
+  ) {
+    return;
+  }
+
+  const records =
+    subscribers.map(
+      (subscriber) => ({
+        campaign_id:
+          campaignId,
+
+        subscriber_id:
+          Number(
+            subscriber.id
+          ),
+
+        email:
+          cleanEmailAddress(
+            subscriber.email
+          ) ||
+          String(
+            subscriber.email ?? ""
+          )
+            .trim()
+            .toLowerCase(),
+
+        resend_id: null,
+
+        status: "failed",
+
+        error: reason,
+
+        sent_at: null,
+      })
+    );
+
+  const {
+    error,
+  } = await supabase
+    .from(
+      "announcement_sends"
+    )
+    .upsert(
+      records,
+      {
+        onConflict:
+          "campaign_id,subscriber_id",
+      }
+    );
+
+  if (error) {
+    console.error(
+      "FAILED SEND TRACKING ERROR:",
+      error
+    );
+  }
+}
+
+// -----------------------------------------
 // LOAD ACTIVE SUBSCRIBERS
 // -----------------------------------------
 
@@ -251,7 +461,8 @@ async function loadActiveSubscribers() {
     );
   }
 
-  const subscribers: Subscriber[] = [];
+  const subscribers:
+    Subscriber[] = [];
 
   for (
     let from = 0;
@@ -288,19 +499,30 @@ async function loadActiveSubscribers() {
     );
   }
 
+  /*
+   * Deduplicate using the cleaned email address.
+   *
+   * This also means an address containing an invisible
+   * character will be treated as the same address as
+   * its clean version.
+   */
   return Array.from(
     new Map(
       subscribers
         .filter(
           (subscriber) =>
-            subscriber.email?.trim()
+            cleanEmailAddress(
+              subscriber.email
+            )
         )
-        .map((subscriber) => [
-          subscriber.email
-            .trim()
-            .toLowerCase(),
-          subscriber,
-        ])
+        .map(
+          (subscriber) => [
+            cleanEmailAddress(
+              subscriber.email
+            ),
+            subscriber,
+          ]
+        )
     ).values()
   );
 }
@@ -322,16 +544,26 @@ async function loadAlreadySent(
       data,
       error,
     } = await supabase
-      .from("announcement_sends")
-      .select("subscriber_id")
+      .from(
+        "announcement_sends"
+      )
+      .select(
+        "subscriber_id"
+      )
       .eq(
         "campaign_id",
         campaignId
       )
-      .eq("status", "sent")
-      .order("subscriber_id", {
-        ascending: true,
-      })
+      .eq(
+        "status",
+        "sent"
+      )
+      .order(
+        "subscriber_id",
+        {
+          ascending: true,
+        }
+      )
       .range(
         from,
         from +
@@ -345,11 +577,16 @@ async function loadAlreadySent(
       );
     }
 
-    const rows = data ?? [];
+    const rows =
+      data ?? [];
 
-    for (const row of rows) {
+    for (
+      const row of rows
+    ) {
       sentSubscriberIds.add(
-        Number(row.subscriber_id)
+        Number(
+          row.subscriber_id
+        )
       );
     }
 
@@ -360,7 +597,8 @@ async function loadAlreadySent(
       break;
     }
 
-    from += DATABASE_PAGE_SIZE;
+    from +=
+      DATABASE_PAGE_SIZE;
   }
 
   return sentSubscriberIds;
@@ -377,7 +615,9 @@ async function loadCampaign(
     data,
     error,
   } = await supabase
-    .from("announcement_campaigns")
+    .from(
+      "announcement_campaigns"
+    )
     .select(
       `
       id,
@@ -389,10 +629,16 @@ async function loadCampaign(
       status
       `
     )
-    .eq("id", campaignId)
+    .eq(
+      "id",
+      campaignId
+    )
     .single();
 
-  if (error || !data) {
+  if (
+    error ||
+    !data
+  ) {
     throw new Error(
       error?.message ||
         `Campaign #${campaignId} could not be found.`
@@ -411,7 +657,8 @@ export async function POST(
 ) {
   try {
     if (
-      !process.env.RESEND_API_KEY
+      !process.env
+        .RESEND_API_KEY
     ) {
       return NextResponse.json(
         {
@@ -419,24 +666,33 @@ export async function POST(
           error:
             "RESEND_API_KEY is not configured.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
     const fromEmail =
-      process.env.NEWSLETTER_FROM;
+      process.env
+        .NEWSLETTER_FROM;
 
     const replyTo =
-      process.env.NEWSLETTER_REPLY_TO;
+      process.env
+        .NEWSLETTER_REPLY_TO;
 
-    if (!fromEmail || !replyTo) {
+    if (
+      !fromEmail ||
+      !replyTo
+    ) {
       return NextResponse.json(
         {
           success: false,
           error:
             "Newsletter email settings are not configured.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
@@ -469,58 +725,93 @@ export async function POST(
             error:
               "Subject and email content are required.",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
-      if (!proofEmail) {
+      if (
+        !proofEmail
+      ) {
         return NextResponse.json(
           {
             success: false,
             error:
               "Proof email address is required.",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
       const cleanProofEmail =
-        proofEmail
-          .trim()
-          .toLowerCase();
+        cleanEmailAddress(
+          proofEmail
+        );
 
-      const {
-        data: subscribers,
-        error,
-      } = await supabase
-        .from("subscribers")
-        .select(
-          "id,name,email,unsubscribe_token,active"
-        )
-        .ilike(
-          "email",
+      if (
+        !isValidEmailAddress(
           cleanProofEmail
-        );
-
-      if (error) {
-        console.error(
-          "PROOF SUBSCRIBER LOOKUP ERROR:",
-          error
-        );
-
+        )
+      ) {
         return NextResponse.json(
           {
             success: false,
             error:
-              `Subscriber lookup failed: ${error.message}`,
+              "The proof email address is not valid.",
           },
-          { status: 500 }
+          {
+            status: 400,
+          }
         );
       }
 
+      /*
+       * Load subscribers and compare their cleaned
+       * address rather than relying on a raw database
+       * string comparison.
+       */
+      const {
+        data: proofSubscribers,
+        error:
+          proofLookupError,
+      } = await supabase
+        .from("subscribers")
+        .select(
+          "id,name,email,unsubscribe_token,active"
+        );
+
       if (
-        !subscribers ||
-        subscribers.length === 0
+        proofLookupError
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              `Subscriber lookup failed: ${proofLookupError.message}`,
+          },
+          {
+            status: 500,
+          }
+        );
+      }
+
+      const matches =
+        (
+          proofSubscribers ??
+          []
+        ).filter(
+          (subscriber) =>
+            cleanEmailAddress(
+              subscriber.email
+            ) ===
+            cleanProofEmail
+        );
+
+      if (
+        matches.length === 0
       ) {
         return NextResponse.json(
           {
@@ -528,12 +819,14 @@ export async function POST(
             error:
               `No subscriber found for ${cleanProofEmail}.`,
           },
-          { status: 404 }
+          {
+            status: 404,
+          }
         );
       }
 
       if (
-        subscribers.length > 1
+        matches.length > 1
       ) {
         return NextResponse.json(
           {
@@ -541,12 +834,14 @@ export async function POST(
             error:
               `More than one subscriber record exists for ${cleanProofEmail}. Please remove the duplicate.`,
           },
-          { status: 409 }
+          {
+            status: 409,
+          }
         );
       }
 
       const subscriber =
-        subscribers[0];
+        matches[0] as Subscriber;
 
       const html =
         createEmailHtml({
@@ -559,17 +854,26 @@ export async function POST(
 
       const {
         data,
-        error: resendError,
+        error:
+          resendError,
       } =
         await resend.emails.send({
-          from: fromEmail,
+          from:
+            fromEmail,
+
           replyTo,
-          to: subscriber.email,
+
+          to:
+            cleanProofEmail,
+
           subject,
+
           html,
         });
 
-      if (resendError) {
+      if (
+        resendError
+      ) {
         console.error(
           "PROOF RESEND ERROR:",
           resendError
@@ -581,7 +885,9 @@ export async function POST(
             error:
               resendError.message,
           },
-          { status: 500 }
+          {
+            status: 500,
+          }
         );
       }
 
@@ -598,18 +904,24 @@ export async function POST(
     // CREATE OR RESUME CAMPAIGN
     // -----------------------------------------
 
-    let currentCampaignId: number;
-    let campaignContent: CampaignContent;
+    let currentCampaignId:
+      number;
+
+    let campaignContent:
+      CampaignContent;
 
     if (campaignId) {
       currentCampaignId =
-        Number(campaignId);
+        Number(
+          campaignId
+        );
 
       if (
         !Number.isFinite(
           currentCampaignId
         ) ||
-        currentCampaignId <= 0
+        currentCampaignId <=
+          0
       ) {
         return NextResponse.json(
           {
@@ -617,7 +929,9 @@ export async function POST(
             error:
               "Invalid campaign ID.",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
@@ -627,7 +941,8 @@ export async function POST(
         );
 
       if (
-        storedCampaign.status ===
+        storedCampaign
+          .status ===
         "completed"
       ) {
         return NextResponse.json(
@@ -648,34 +963,45 @@ export async function POST(
       campaignContent = {
         subject:
           String(
-            storedCampaign.subject ??
+            storedCampaign
+              .subject ??
               ""
           ),
+
         heading:
           String(
-            storedCampaign.heading ??
+            storedCampaign
+              .heading ??
               ""
           ),
+
         content:
           String(
-            storedCampaign.content ??
+            storedCampaign
+              .content ??
               ""
           ),
+
         buttonText:
           String(
-            storedCampaign.button_text ??
+            storedCampaign
+              .button_text ??
               ""
           ),
+
         buttonLink:
           String(
-            storedCampaign.button_link ??
+            storedCampaign
+              .button_link ??
               ""
           ),
       };
 
       if (
-        !campaignContent.subject ||
-        !campaignContent.content
+        !campaignContent
+          .subject ||
+        !campaignContent
+          .content
       ) {
         throw new Error(
           `Campaign #${currentCampaignId} does not contain valid email content.`
@@ -683,22 +1009,27 @@ export async function POST(
       }
 
       const {
-        error: resumeStatusError,
+        error:
+          resumeStatusError,
       } = await supabase
         .from(
           "announcement_campaigns"
         )
         .update({
-          status: "sending",
+          status:
+            "sending",
         })
         .eq(
           "id",
           currentCampaignId
         );
 
-      if (resumeStatusError) {
+      if (
+        resumeStatusError
+      ) {
         throw new Error(
-          resumeStatusError.message
+          resumeStatusError
+            .message
         );
       }
     } else {
@@ -712,21 +1043,33 @@ export async function POST(
             error:
               "Subject and email content are required.",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
       campaignContent = {
         subject:
           String(subject),
+
         heading:
-          String(heading ?? ""),
+          String(
+            heading ?? ""
+          ),
+
         content:
           String(content),
+
         buttonText:
-          String(buttonText ?? ""),
+          String(
+            buttonText ?? ""
+          ),
+
         buttonLink:
-          String(buttonLink ?? ""),
+          String(
+            buttonLink ?? ""
+          ),
       };
 
       const {
@@ -739,22 +1082,34 @@ export async function POST(
         )
         .insert({
           subject:
-            campaignContent.subject,
+            campaignContent
+              .subject,
+
           heading:
-            campaignContent.heading ||
+            campaignContent
+              .heading ||
             null,
+
           content:
-            campaignContent.content,
+            campaignContent
+              .content,
+
           button_text:
-            campaignContent.buttonText ||
+            campaignContent
+              .buttonText ||
             null,
+
           button_link:
-            campaignContent.buttonLink ||
+            campaignContent
+              .buttonLink ||
             null,
+
           status:
             "sending",
+
           started_at:
-            new Date().toISOString(),
+            new Date()
+              .toISOString(),
         })
         .select("id")
         .single();
@@ -771,7 +1126,9 @@ export async function POST(
       }
 
       currentCampaignId =
-        Number(campaign.id);
+        Number(
+          campaign.id
+        );
     }
 
     // -----------------------------------------
@@ -790,7 +1147,9 @@ export async function POST(
       subscribers.filter(
         (subscriber) =>
           !alreadySent.has(
-            Number(subscriber.id)
+            Number(
+              subscriber.id
+            )
           )
       );
 
@@ -799,7 +1158,7 @@ export async function POST(
       pendingSubscribers.length;
 
     // -----------------------------------------
-    // NOTHING LEFT TO SEND
+    // NOTHING LEFT
     // -----------------------------------------
 
     if (
@@ -807,7 +1166,8 @@ export async function POST(
       0
     ) {
       const {
-        error: completeError,
+        error:
+          completeError,
       } = await supabase
         .from(
           "announcement_campaigns"
@@ -815,17 +1175,22 @@ export async function POST(
         .update({
           status:
             "completed",
+
           completed_at:
-            new Date().toISOString(),
+            new Date()
+              .toISOString(),
         })
         .eq(
           "id",
           currentCampaignId
         );
 
-      if (completeError) {
+      if (
+        completeError
+      ) {
         throw new Error(
-          completeError.message
+          completeError
+            .message
         );
       }
 
@@ -847,13 +1212,11 @@ export async function POST(
     let sent = 0;
     let failed = 0;
 
-    const failedBatches: Array<{
-      emails: string[];
-      reason: string;
-    }> = [];
+    const failedBatches:
+      FailedBatch[] = [];
 
     // -----------------------------------------
-    // SEND IN RESEND BATCHES
+    // PROCESS EACH BATCH
     // -----------------------------------------
 
     for (
@@ -863,51 +1226,190 @@ export async function POST(
       index +=
         RESEND_BATCH_SIZE
     ) {
-      const subscriberBatch =
+      const rawBatch =
         pendingSubscribers.slice(
           index,
           index +
             RESEND_BATCH_SIZE
         );
 
-      const emails =
-        subscriberBatch.map(
+      /*
+       * Clean and validate every recipient BEFORE
+       * building the Resend batch.
+       */
+      const preparedBatch =
+        rawBatch.map(
           (subscriber) => ({
-            from: fromEmail,
+            subscriber,
+            originalEmail:
+              subscriber.email,
+            cleanEmail:
+              cleanEmailAddress(
+                subscriber.email
+              ),
+          })
+        );
+
+      const invalidItems =
+        preparedBatch.filter(
+          (item) =>
+            !isValidEmailAddress(
+              item.cleanEmail
+            )
+        );
+
+      const validItems =
+        preparedBatch.filter(
+          (item) =>
+            isValidEmailAddress(
+              item.cleanEmail
+            )
+        );
+
+      // ---------------------------------------
+      // INVALID EMAILS
+      // ---------------------------------------
+
+      if (
+        invalidItems.length >
+        0
+      ) {
+        const invalidSubscribers =
+          invalidItems.map(
+            (item) =>
+              item.subscriber
+          );
+
+        const reason =
+          "Invalid email address after automatic cleaning. Please review this subscriber record.";
+
+        failed +=
+          invalidSubscribers.length;
+
+        failedBatches.push({
+          emails:
+            invalidItems.map(
+              (item) =>
+                item.originalEmail
+            ),
+          reason,
+        });
+
+        await recordFailedSubscribers({
+          campaignId:
+            currentCampaignId,
+
+          subscribers:
+            invalidSubscribers,
+
+          reason,
+        });
+      }
+
+      /*
+       * If every address in this raw batch was bad,
+       * there is nothing to send to Resend.
+       */
+      if (
+        validItems.length ===
+        0
+      ) {
+        continue;
+      }
+
+      // Log any values that were repaired.
+      for (
+        const item of validItems
+      ) {
+        if (
+          item.cleanEmail !==
+          String(
+            item.originalEmail
+          )
+            .trim()
+            .toLowerCase()
+        ) {
+          console.log(
+            "EMAIL CLEANED:",
+            {
+              subscriberId:
+                item.subscriber
+                  .id,
+              original:
+                item.originalEmail,
+              cleaned:
+                item.cleanEmail,
+            }
+          );
+        }
+      }
+
+      const sendableSubscribers =
+        validItems.map(
+          (item) =>
+            item.subscriber
+        );
+
+      const emails =
+        validItems.map(
+          (item) => ({
+            from:
+              fromEmail,
+
             replyTo,
-            to: subscriber.email,
+
+            to:
+              item.cleanEmail,
+
             subject:
-              campaignContent.subject,
+              campaignContent
+                .subject,
+
             html:
               createEmailHtml({
-                subscriber,
+                subscriber:
+                  item.subscriber,
+
                 heading:
-                  campaignContent.heading,
+                  campaignContent
+                    .heading,
+
                 content:
-                  campaignContent.content,
+                  campaignContent
+                    .content,
+
                 buttonText:
-                  campaignContent.buttonText,
+                  campaignContent
+                    .buttonText,
+
                 buttonLink:
-                  campaignContent.buttonLink,
+                  campaignContent
+                    .buttonLink,
               }),
           })
         );
 
       // ---------------------------------------
-      // SEND BATCH WITH AUTOMATIC RETRIES
+      // SEND WITH RETRIES
       // ---------------------------------------
 
       let batchData:
-        | { data?: ResendBatchResult[] }
+        | {
+            data?:
+              ResendBatchResult[];
+          }
         | null = null;
 
       let batchError:
-        | { message?: string }
+        | {
+            message?: string;
+          }
         | null = null;
 
       for (
         let attempt = 1;
-        attempt <= MAX_BATCH_RETRIES;
+        attempt <=
+        MAX_BATCH_RETRIES;
         attempt++
       ) {
         const result =
@@ -918,7 +1420,8 @@ export async function POST(
         batchData =
           result.data as
             | {
-                data?: ResendBatchResult[];
+                data?:
+                  ResendBatchResult[];
               }
             | null;
 
@@ -945,7 +1448,7 @@ export async function POST(
       }
 
       // ---------------------------------------
-      // BATCH STILL FAILED AFTER RETRIES
+      // RESEND BATCH FAILED
       // ---------------------------------------
 
       if (batchError) {
@@ -956,81 +1459,40 @@ export async function POST(
         console.error(
           "RESEND BATCH FAILED AFTER RETRIES:",
           reason,
-          subscriberBatch.map(
-            (subscriber) =>
-              subscriber.email
+          validItems.map(
+            (item) =>
+              item.cleanEmail
           )
         );
 
         failed +=
-          subscriberBatch.length;
+          sendableSubscribers.length;
 
         failedBatches.push({
           emails:
-            subscriberBatch.map(
-              (subscriber) =>
-                subscriber.email
+            validItems.map(
+              (item) =>
+                item.cleanEmail
             ),
           reason,
         });
 
-        // Save the failed batch against
-        // each subscriber with the reason.
-        const failedRecords =
-          subscriberBatch.map(
-            (subscriber) => ({
-              campaign_id:
-                currentCampaignId,
+        await recordFailedSubscribers({
+          campaignId:
+            currentCampaignId,
 
-              subscriber_id:
-                Number(
-                  subscriber.id
-                ),
+          subscribers:
+            sendableSubscribers,
 
-              email:
-                subscriber.email
-                  .trim()
-                  .toLowerCase(),
+          reason,
+        });
 
-              resend_id: null,
-
-              status: "failed",
-
-              error: reason,
-
-              sent_at: null,
-            })
-          );
-
-        const {
-          error:
-            failedTrackingError,
-        } = await supabase
-          .from(
-            "announcement_sends"
-          )
-          .upsert(
-            failedRecords,
-            {
-              onConflict:
-                "campaign_id,subscriber_id",
-            }
-          );
-
-        if (
-          failedTrackingError
-        ) {
-          console.error(
-            "FAILED SEND TRACKING ERROR:",
-            failedTrackingError
-          );
-        }
-
-        // Failed subscribers are not counted
-        // as sent, so Resume Campaign can
-        // safely try them again later.
         continue;
       }
+
+      // ---------------------------------------
+      // CHECK RESEND RESPONSE
+      // ---------------------------------------
 
       const resendResults =
         Array.isArray(
@@ -1041,14 +1503,15 @@ export async function POST(
 
       if (
         resendResults.length !==
-        subscriberBatch.length
+        sendableSubscribers.length
       ) {
         await supabase
           .from(
             "announcement_campaigns"
           )
           .update({
-            status: "partial",
+            status:
+              "partial",
           })
           .eq(
             "id",
@@ -1059,28 +1522,40 @@ export async function POST(
           {
             success: false,
             complete: false,
+
             campaignId:
               currentCampaignId,
+
             error:
               "Resend accepted a batch but the returned message IDs could not be matched safely. Do not resend until checked.",
+
             sent,
             failed,
+
             remaining:
               pendingSubscribers.length -
               sent,
+
             failedBatches,
           },
-          { status: 500 }
+          {
+            status: 500,
+          }
         );
       }
 
+      // ---------------------------------------
+      // RECORD SUCCESSFUL SENDS
+      // ---------------------------------------
+
       const sentAt =
-        new Date().toISOString();
+        new Date()
+          .toISOString();
 
       const records =
-        subscriberBatch.map(
+        validItems.map(
           (
-            subscriber,
+            item,
             batchIndex
           ) => ({
             campaign_id:
@@ -1088,24 +1563,31 @@ export async function POST(
 
             subscriber_id:
               Number(
-                subscriber.id
+                item.subscriber
+                  .id
               ),
 
+            /*
+             * Store the cleaned address actually
+             * supplied to Resend.
+             */
             email:
-              subscriber.email
-                .trim()
-                .toLowerCase(),
+              item.cleanEmail,
 
             resend_id:
               resendResults[
                 batchIndex
-              ]?.id ?? null,
+              ]?.id ??
+              null,
 
-            status: "sent",
+            status:
+              "sent",
 
-            error: null,
+            error:
+              null,
 
-            sent_at: sentAt,
+            sent_at:
+              sentAt,
           })
         );
 
@@ -1116,18 +1598,28 @@ export async function POST(
         .from(
           "announcement_sends"
         )
-        .upsert(records, {
-          onConflict:
-            "campaign_id,subscriber_id",
-        });
+        .upsert(
+          records,
+          {
+            onConflict:
+              "campaign_id,subscriber_id",
+          }
+        );
 
-      if (trackingError) {
+      if (
+        trackingError
+      ) {
+        /*
+         * Resend has already accepted these emails.
+         * Stop rather than risk duplicate messages.
+         */
         await supabase
           .from(
             "announcement_campaigns"
           )
           .update({
-            status: "partial",
+            status:
+              "partial",
           })
           .eq(
             "id",
@@ -1138,6 +1630,7 @@ export async function POST(
           {
             success: false,
             complete: false,
+
             campaignId:
               currentCampaignId,
 
@@ -1156,12 +1649,14 @@ export async function POST(
 
             failedBatches,
           },
-          { status: 500 }
+          {
+            status: 500,
+          }
         );
       }
 
       sent +=
-        subscriberBatch.length;
+        sendableSubscribers.length;
 
       if (
         index +
@@ -1186,19 +1681,22 @@ export async function POST(
       remaining === 0;
 
     const {
-      error: finalStatusError,
+      error:
+        finalStatusError,
     } = await supabase
       .from(
         "announcement_campaigns"
       )
       .update({
-        status: complete
-          ? "completed"
-          : "partial",
+        status:
+          complete
+            ? "completed"
+            : "partial",
 
         completed_at:
           complete
-            ? new Date().toISOString()
+            ? new Date()
+                .toISOString()
             : null,
       })
       .eq(
@@ -1206,9 +1704,12 @@ export async function POST(
         currentCampaignId
       );
 
-    if (finalStatusError) {
+    if (
+      finalStatusError
+    ) {
       throw new Error(
-        finalStatusError.message
+        finalStatusError
+          .message
       );
     }
 
@@ -1251,7 +1752,9 @@ export async function POST(
             ? error.message
             : "Unexpected error.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
