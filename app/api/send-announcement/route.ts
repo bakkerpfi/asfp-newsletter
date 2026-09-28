@@ -768,47 +768,40 @@ export async function POST(
         );
       }
 
-      /*
-       * Load subscribers and compare their cleaned
-       * address rather than relying on a raw database
-       * string comparison.
-       */
-      const {
-        data: proofSubscribers,
-        error:
-          proofLookupError,
-      } = await supabase
-        .from("subscribers")
-        .select(
-          "id,name,email,unsubscribe_token,active"
-        );
+ /*
+ * Look up the proof subscriber directly in Supabase.
+ *
+ * This avoids Supabase's default 1,000-row result limit.
+ * The email is already cleaned and lower-cased above.
+ */
+const {
+  data: proofSubscribers,
+  error: proofLookupError,
+} = await supabase
+  .from("subscribers")
+  .select(
+    "id,name,email,unsubscribe_token,active"
+  )
+  .ilike(
+    "email",
+    cleanProofEmail
+  );
 
-      if (
-        proofLookupError
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              `Subscriber lookup failed: ${proofLookupError.message}`,
-          },
-          {
-            status: 500,
-          }
-        );
-      }
+if (proofLookupError) {
+  return NextResponse.json(
+    {
+      success: false,
+      error:
+        `Subscriber lookup failed: ${proofLookupError.message}`,
+    },
+    {
+      status: 500,
+    }
+  );
+}
 
-      const matches =
-        (
-          proofSubscribers ??
-          []
-        ).filter(
-          (subscriber) =>
-            cleanEmailAddress(
-              subscriber.email
-            ) ===
-            cleanProofEmail
-        );
+const matches =
+  proofSubscribers ?? [];
 
       if (
         matches.length === 0
