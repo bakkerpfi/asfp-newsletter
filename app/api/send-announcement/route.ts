@@ -217,18 +217,41 @@ function createEmailHtml({
       ? `Hello ${subscriberName},`
       : "Hello,";
 
-  const paragraphs = String(content)
-    .split(/\n\s*\n/)
-    .filter((paragraph) =>
-      paragraph.trim()
-    )
-    .map(
-      (paragraph) =>
-        `<p style="margin:0 0 18px 0;line-height:1.7;">${escapeHtml(
-          paragraph.trim()
-        ).replace(/\n/g, "<br>")}</p>`
-    )
-    .join("");
+const normalizedContent = String(content ?? "")
+  // Standardise Windows/Mac line endings
+  .replace(/\r\n?/g, "\n")
+  // Remove non-breaking spaces that can cause odd Outlook wrapping
+  .replace(/\u00A0/g, " ")
+  // Normalise tabs
+  .replace(/\t+/g, " ")
+  .trim();
+
+const paragraphs = normalizedContent
+  // Blank line = genuine new paragraph
+  .split(/\n\s*\n/)
+  .map((paragraph) =>
+    paragraph
+      // Any newline remaining inside a paragraph is NOT
+      // a deliberate email line break. Convert it to a space.
+      .replace(/\s*\n+\s*/g, " ")
+      // Collapse repeated spaces
+      .replace(/ {2,}/g, " ")
+      .trim()
+  )
+  .filter(Boolean)
+  .map(
+    (paragraph) =>
+      `<p style="
+        margin:0 0 18px 0;
+        padding:0;
+        font-family:Arial,Helvetica,sans-serif;
+        font-size:16px;
+        line-height:1.7;
+        color:#1e293b;
+        white-space:normal;
+      ">${escapeHtml(paragraph)}</p>`
+  )
+  .join("");
 
   return `
     <!DOCTYPE html>
@@ -298,12 +321,16 @@ function createEmailHtml({
                   : ""
               }
 
-              <div style="
-                font-size:16px;
-                line-height:1.7;
-              ">
-                ${paragraphs}
-              </div>
+<div style="
+  width:100%;
+  font-family:Arial,Helvetica,sans-serif;
+  font-size:16px;
+  line-height:1.7;
+  color:#1e293b;
+  white-space:normal;
+">
+  ${paragraphs}
+</div>
 
               ${
                 buttonText &&
