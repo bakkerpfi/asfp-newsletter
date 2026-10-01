@@ -1,42 +1,73 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { requireCompanyAccess } from "@/lib/tenant-auth";
 
-// -----------------------------------------
-// GET ALL SUBSCRIBERS
-// -----------------------------------------
+const DATABASE_PAGE_SIZE = 1000;
 
-export async function GET() {
+// =========================================================
+// GET COMPANY SUBSCRIBERS
+// =========================================================
+
+export async function GET(
+  request: NextRequest
+) {
   try {
-    // Get exact total subscriber count
-    const { count, error: countError } = await supabase
+    const companySlug =
+      request.nextUrl.searchParams.get(
+        "company"
+      );
+
+    const tenant =
+      await requireCompanyAccess(
+        companySlug
+      );
+
+    const companyId =
+      tenant.company.id;
+
+    const {
+      count,
+      error: countError,
+    } = await supabase
       .from("subscribers")
       .select("*", {
         count: "exact",
         head: true,
-      });
+      })
+      .eq(
+        "company_id",
+        companyId
+      );
 
     if (countError) {
       throw countError;
     }
 
     const subscribers: any[] = [];
-    const pageSize = 1000;
 
-    // Fetch all subscribers in batches of 1000
     for (
       let from = 0;
       from < (count ?? 0);
-      from += pageSize
+      from += DATABASE_PAGE_SIZE
     ) {
-      const { data, error } = await supabase
+      const {
+        data,
+        error,
+      } = await supabase
         .from("subscribers")
         .select("*")
+        .eq(
+          "company_id",
+          companyId
+        )
         .order("name", {
           ascending: true,
         })
         .range(
           from,
-          from + pageSize - 1
+          from +
+            DATABASE_PAGE_SIZE -
+            1
         );
 
       if (error) {
@@ -51,45 +82,76 @@ export async function GET() {
     return NextResponse.json(
       subscribers
     );
-
   } catch (error) {
     console.error(
       "GET SUBSCRIBERS ERROR:",
       error
     );
 
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    const status =
+      message ===
+      "Authentication required."
+        ? 401
+        : message.includes(
+            "access"
+          )
+        ? 403
+        : 400;
+
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : String(error),
+        error: message,
       },
       {
-        status: 500,
+        status,
       }
     );
   }
 }
 
-// -----------------------------------------
-// ADD NEW SUBSCRIBER
-// -----------------------------------------
+// =========================================================
+// ADD COMPANY SUBSCRIBER
+// =========================================================
 
 export async function POST(
-  request: Request
+  request: NextRequest
 ) {
   try {
     const body =
       await request.json();
 
-    // ---------------------------------------
+    const companySlug =
+      String(
+        body.companySlug ?? ""
+      ).trim();
+
+    const tenant =
+      await requireCompanyAccess(
+        companySlug
+      );
+
+    const companyId =
+      tenant.company.id;
+
+    // -----------------------------------------
     // CLEAN INPUT
-    // ---------------------------------------
+    // -----------------------------------------
 
     const cleanEmail =
       String(body.email ?? "")
+        .normalize("NFKC")
+        .replace(
+          /[\u0000-\u001F\u007F-\u009F\u00A0\u200B-\u200D\u2060\uFEFF]/g,
+          ""
+        )
+        .replace(/\s+/g, "")
+        .replace(/[.,;:]+$/g, "")
         .trim()
         .toLowerCase();
 
@@ -97,17 +159,19 @@ export async function POST(
       String(body.name ?? "")
         .trim();
 
-    const cleanCompany =
-      String(body.company ?? "")
-        .trim();
+    const cleanSubscriberCompany =
+      String(
+        body.company ?? ""
+      ).trim();
 
     const cleanMemberType =
-      String(body.member_type ?? "")
-        .trim();
+      String(
+        body.member_type ?? ""
+      ).trim();
 
-    // ---------------------------------------
-    // VALIDATE EMAIL
-    // ---------------------------------------
+    // -----------------------------------------
+    // VALIDATE
+    // -----------------------------------------
 
     if (!cleanEmail) {
       return NextResponse.json(
@@ -122,7 +186,6 @@ export async function POST(
       );
     }
 
-    // Basic email validation
     const emailPattern =
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -143,39 +206,39 @@ export async function POST(
       );
     }
 
-    // ---------------------------------------
-    // INSERT SUBSCRIBER
-    // ---------------------------------------
+    // -----------------------------------------
+    // INSERT INTO SELECTED COMPANY
+    // -----------------------------------------
 
-    const { data, error } =
-      await supabase
-        .from("subscribers")
-        .insert([
-          {
-            name:
-              cleanName || null,
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("subscribers")
+      .insert({
+        company_id:
+          companyId,
 
-            company:
-              cleanCompany || null,
+        name:
+          cleanName || null,
 
-            email:
-              cleanEmail,
+        company:
+          cleanSubscriberCompany ||
+          null,
 
-            member_type:
-              cleanMemberType ||
-              null,
+        email:
+          cleanEmail,
 
-            active: true,
-          },
-        ])
-        .select()
-        .single();
+        member_type:
+          cleanMemberType ||
+          null,
+
+        active: true,
+      })
+      .select()
+      .single();
 
     if (error) {
-      // -------------------------------------
-      // DUPLICATE EMAIL
-      // -------------------------------------
-
       if (
         error.code === "23505"
       ) {
@@ -183,7 +246,7 @@ export async function POST(
           {
             success: false,
             error:
-              "This email address already exists.",
+              "This email address already exists for this company.",
           },
           {
             status: 400,
@@ -208,32 +271,47 @@ export async function POST(
       );
     }
 
-    // ---------------------------------------
-    // SUCCESS
-    // ---------------------------------------
-
     return NextResponse.json({
       success: true,
       id: data.id,
       subscriber: data,
+      company: {
+        id:
+          tenant.company.id,
+        name:
+          tenant.company.name,
+        slug:
+          tenant.company.slug,
+      },
     });
-
   } catch (error) {
     console.error(
       "POST SUBSCRIBER ERROR:",
       error
     );
 
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    const status =
+      message ===
+      "Authentication required."
+        ? 401
+        : message.includes(
+            "access"
+          )
+        ? 403
+        : 400;
+
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : String(error),
+        error: message,
       },
       {
-        status: 500,
+        status,
       }
     );
   }

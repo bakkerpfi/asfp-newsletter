@@ -1,95 +1,185 @@
-import Image from "next/image";
 import Link from "next/link";
 
-export default function AdminSidebar() {
+type Company = {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  primary_colour: string;
+  secondary_colour: string;
+};
+
+type AdminSidebarProps = {
+  companies?: Company[];
+  currentCompany?: Company | null;
+  platformAdmin?: boolean;
+};
+
+export default function AdminSidebar({
+  companies = [],
+  currentCompany = null,
+  platformAdmin = false,
+}: AdminSidebarProps) {
+  const companySlug =
+    currentCompany?.slug ?? "";
+
+  function companyHref(path: string) {
+    if (!companySlug) {
+      return path;
+    }
+
+    return `${path}?company=${encodeURIComponent(
+      companySlug
+    )}`;
+  }
+
+  const primaryColour =
+    currentCompany?.primary_colour ||
+    "#0F172A";
+
+  const secondaryColour =
+    currentCompany?.secondary_colour ||
+    "#DC2626";
+
   return (
-    <aside className="min-h-screen w-72 bg-[#1E2D5A] text-white">
+    <aside
+      className="min-h-screen w-72 text-white"
+      style={{
+        backgroundColor: primaryColour,
+      }}
+    >
+      {/* PLATFORM HEADER */}
 
-      {/* LOGO / HEADER */}
-
-      <div className="border-b border-blue-800 p-6">
-
-        <Image
-          src="/AustraliaNewZealand-02.png"
-          alt="ASFP Australia & New Zealand"
-          width={120}
-          height={120}
-          className="mx-auto h-auto"
-        />
+      <div className="border-b border-white/10 p-6">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-3xl font-bold">
+          C
+        </div>
 
         <h2 className="mt-4 text-center text-xl font-bold">
-          ASFP Admin
+          Codexus Newsletter
         </h2>
 
-        <p className="mt-1 text-center text-sm text-slate-300">
-          Newsletter Portal
+        <p className="mt-1 text-center text-sm text-white/70">
+          Communications Platform
         </p>
-
       </div>
+
+      {/* CURRENT COMPANY */}
+
+      {currentCompany && (
+        <div className="border-b border-white/10 p-5">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/60">
+            Current Company
+          </p>
+
+          <div className="rounded-lg bg-white/10 p-3">
+            <p className="font-semibold">
+              {currentCompany.name}
+            </p>
+          </div>
+
+          {companies.length > 1 && (
+            <div className="mt-3 space-y-1">
+              {companies.map((company) => {
+                const selected =
+                  company.id ===
+                  currentCompany.id;
+
+                return (
+                  <Link
+                    key={company.id}
+                    href={`/admin?company=${encodeURIComponent(
+                      company.slug
+                    )}`}
+                    className={`block rounded-md px-3 py-2 text-sm transition ${
+                      selected
+                        ? "bg-white text-slate-900"
+                        : "bg-white/5 text-white hover:bg-white/15"
+                    }`}
+                  >
+                    {company.name}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {platformAdmin && (
+            <p className="mt-3 text-xs text-white/60">
+              Platform Administrator
+            </p>
+          )}
+        </div>
+      )}
 
       {/* NAVIGATION */}
 
       <nav className="space-y-2 p-6">
-
         <Link
-          href="/admin"
-          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-blue-800"
+          href={companyHref("/admin")}
+          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-white/10"
         >
           Dashboard
         </Link>
 
         <Link
-          href="/admin/issues"
-          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-blue-800"
+          href={companyHref("/admin/issues")}
+          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-white/10"
         >
           Newsletter Issues
         </Link>
 
         <Link
-          href="/admin/articles"
-          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-blue-800"
+          href={companyHref(
+            "/admin/articles"
+          )}
+          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-white/10"
         >
           Articles
         </Link>
 
         <Link
-          href="/admin/polls"
-          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-blue-800"
+          href={companyHref("/admin/polls")}
+          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-white/10"
         >
           Polls
         </Link>
 
         <Link
-          href="/admin/subscribers"
-          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-blue-800"
+          href={companyHref(
+            "/admin/subscribers"
+          )}
+          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-white/10"
         >
           Subscribers
         </Link>
 
-        {/* EMAIL SECTION */}
+        <div className="my-4 border-t border-white/10" />
 
-        <div className="my-4 border-t border-blue-800" />
-
-        <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wider text-white/50">
           Email
         </p>
 
         <Link
-          href="/admin/email"
-          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-blue-800"
+          href={companyHref("/admin/email")}
+          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-white/10"
         >
           Newsletter Campaign
         </Link>
 
         <Link
-          href="/admin/email/create"
-          className="block rounded-lg bg-[#F52B3A] px-4 py-3 font-semibold transition hover:bg-red-600"
+          href={companyHref(
+            "/admin/email/create"
+          )}
+          className="block rounded-lg px-4 py-3 font-semibold transition"
+          style={{
+            backgroundColor:
+              secondaryColour,
+          }}
         >
           Create Email
         </Link>
-
       </nav>
-
     </aside>
   );
 }
