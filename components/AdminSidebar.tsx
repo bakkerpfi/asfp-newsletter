@@ -154,6 +154,13 @@ export default function AdminSidebar({
           Subscribers
         </Link>
 
+        <Link
+          href={companyHref("/admin/settings")}
+          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-white/10"
+        >
+          Company Settings
+        </Link>
+
         <div className="my-4 border-t border-white/10" />
 
         <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wider text-white/50">

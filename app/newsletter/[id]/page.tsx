@@ -230,13 +230,11 @@ export default async function NewsletterPage({
 
             {company.logo_url ? (
 
-              <img
-                src={
-                  company.logo_url
-                }
-                alt={companyName}
-                className="max-h-40 w-auto max-w-[220px] object-contain"
-              />
+<img
+  src={company.logo_url}
+  alt={companyName}
+  className="max-h-40 w-auto max-w-[320px] object-contain"
+/>
 
             ) : isAsfp ? (
 
@@ -256,28 +254,25 @@ export default async function NewsletterPage({
 
             )}
 
-            <div>
+<div>
+  <h1 className="text-3xl font-bold leading-tight">
+    {newsletterHeading}
+  </h1>
 
-              <h1 className="text-5xl font-bold">
-                {newsletterHeading}
-              </h1>
+  <p className="mt-2 text-lg text-white/90">
+    {issue.title}
+  </p>
 
-              <p className="mt-2 text-2xl text-white/90">
-                {issue.title}
-              </p>
+  <p className="mt-2 text-sm text-white/80">
+    Issue{" "}
+    {issue.issue_number ?? id}
+  </p>
 
-              <p className="mt-2 text-white/80">
-                Issue{" "}
-                {issue.issue_number ??
-                  id}
-              </p>
-
-              <p className="text-white/70">
-                {issue.month}{" "}
-                {issue.year}
-              </p>
-
-            </div>
+  <p className="text-sm text-white/70">
+    {issue.month}{" "}
+    {issue.year}
+  </p>
+</div>
 
           </div>
 
