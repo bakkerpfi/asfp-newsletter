@@ -95,13 +95,29 @@ export default function SendNewsletterButtons({
   async function sendNewsletter() {
     if (!preview) return;
 
-    const ok = confirm(
-      `Send this newsletter for ${companyName}?\n\n` +
-      `Active: ${preview.audience.active}\n` +
-      `Already sent: ${preview.audience.alreadySent}\n` +
-      `Pending: ${preview.audience.pending}\n\n` +
-      `This action cannot be undone.`
-    );
+const isResume =
+  preview.audience.alreadySent > 0;
+
+const ok = confirm(
+  `${
+    isResume
+      ? "Resume"
+      : "Send"
+  } ${companyName} newsletter campaign?\n\n` +
+  `Active subscribers: ${preview.audience.active}\n` +
+  `Already sent: ${preview.audience.alreadySent}\n` +
+  `Pending recipients: ${preview.audience.pending}\n\n` +
+  `${
+    isResume
+      ? `Only the ${preview.audience.pending} pending recipient${
+          preview.audience.pending === 1 ? "" : "s"
+        } will be emailed. Subscribers already recorded as sent will be skipped.`
+      : `The newsletter will be sent to ${preview.audience.pending} recipient${
+          preview.audience.pending === 1 ? "" : "s"
+        }.`
+  }\n\n` +
+  `Do you want to continue?`
+);
 
     if (!ok) return;
 
@@ -176,14 +192,26 @@ export default function SendNewsletterButtons({
           {checking ? "Checking..." : "Preview Campaign Audience"}
         </button>
 
-        <button
-          type="button"
-          onClick={sendNewsletter}
-          disabled={!preview || sending || preview.audience.pending === 0}
-          className="rounded bg-green-700 px-6 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {sending ? "Sending..." : "Send Newsletter"}
-        </button>
+<button
+  type="button"
+  onClick={sendNewsletter}
+  disabled={
+    !preview ||
+    sending ||
+    preview.audience.pending === 0
+  }
+  className="rounded bg-green-700 px-6 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+>
+  {sending
+    ? "Sending..."
+    : !preview
+    ? "Send Newsletter"
+    : preview.audience.pending === 0
+    ? "Campaign Complete"
+    : preview.audience.alreadySent > 0
+    ? "Resume Campaign"
+    : "Send Newsletter"}
+</button>
       </div>
 
       {preview && (
@@ -216,9 +244,9 @@ export default function SendNewsletterButtons({
         </div>
       )}
 
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        Resume and recovery remain temporarily disabled until those routes are converted to the same tenant-safe model.
-      </div>
+<div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+  Campaign resumption is automatic. Subscribers already recorded as sent are skipped, so interrupted campaigns can safely continue from the remaining recipients.
+</div>
     </div>
   );
 }

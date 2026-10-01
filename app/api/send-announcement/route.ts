@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabase } from "@/lib/supabase";
+import { requireCompanyAccess } from "@/lib/tenant-auth";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -39,6 +40,18 @@ type FailedBatch = {
   reason: string;
 };
 
+type Company = {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  primary_colour: string;
+  secondary_colour: string;
+  sender_name: string | null;
+  sender_email: string | null;
+  reply_to_email: string | null;
+};
+
 // -----------------------------------------
 // HELPERS
 // -----------------------------------------
@@ -74,7 +87,7 @@ function cleanEmailAddress(
    * characters to their normal ASCII equivalents.
    *
    * Example:
-   * ＠ becomes @
+   * ï¼  becomes @
    */
   email = email.normalize("NFKC");
 
@@ -190,12 +203,14 @@ function isValidEmailAddress(
 
 function createEmailHtml({
   subscriber,
+  company,
   heading,
   content,
   buttonText,
   buttonLink,
 }: {
   subscriber: Subscriber;
+  company?: Company;
   heading?: string;
   content: string;
   buttonText?: string;
@@ -253,6 +268,20 @@ const paragraphs = normalizedContent
   )
   .join("");
 
+  const primaryColour =
+    company?.primary_colour || "#1E2D5A";
+
+  const secondaryColour =
+    company?.secondary_colour || "#F52B3A";
+
+  const companyName =
+    company?.name || "ASFP Australia & New Zealand";
+
+  const logoHtml =
+    company?.logo_url
+      ? `<img src="${escapeHtml(company.logo_url)}" alt="${escapeHtml(companyName)}" style="display:block;max-width:220px;max-height:90px;width:auto;height:auto;margin:0 auto;" />`
+      : `<img src="${WEBSITE_URL}/AustraliaNewZealand-02.png" alt="${escapeHtml(companyName)}" width="140" style="display:block;width:140px;max-width:100%;height:auto;margin:0 auto;" />`;
+
   return `
     <!DOCTYPE html>
     <html>
@@ -277,24 +306,13 @@ const paragraphs = normalizedContent
           ">
 
             <div style="
-              background:#1E2D5A;
+              background:${primaryColour};
               padding:18px 30px;
               text-align:center;
-              border-bottom:4px solid #F52B3A;
+              border-bottom:4px solid ${secondaryColour};
             ">
 
-              <img
-                src="${WEBSITE_URL}/AustraliaNewZealand-02.png"
-                alt="ASFP Australia & New Zealand"
-                width="140"
-                style="
-                  display:block;
-                  width:140px;
-                  max-width:100%;
-                  height:auto;
-                  margin:0 auto;
-                "
-              />
+              ${logoHtml}
 
             </div>
 
@@ -311,7 +329,7 @@ const paragraphs = normalizedContent
                 heading
                   ? `
                     <h1 style="
-                      color:#1E2D5A;
+                      color:${primaryColour};
                       font-size:28px;
                       margin:0 0 25px 0;
                     ">
@@ -343,7 +361,7 @@ const paragraphs = normalizedContent
                       <a
                         href="${escapeHtml(buttonLink)}"
                         style="
-                          background:#F52B3A;
+                          background:${secondaryColour};
                           color:#ffffff;
                           padding:14px 24px;
                           text-decoration:none;
@@ -370,8 +388,8 @@ const paragraphs = normalizedContent
 
               <p>
                 You are receiving this email because you are
-                subscribed to ASFP Australia & New Zealand
-                industry updates.
+                subscribed to ${escapeHtml(companyName)}
+                updates.
               </p>
 
               <p>
@@ -399,10 +417,12 @@ const paragraphs = normalizedContent
 // -----------------------------------------
 
 async function recordFailedSubscribers({
+  companyId,
   campaignId,
   subscribers,
   reason,
 }: {
+  companyId: string;
   campaignId: number;
   subscribers: Subscriber[];
   reason: string;
@@ -416,6 +436,9 @@ async function recordFailedSubscribers({
   const records =
     subscribers.map(
       (subscriber) => ({
+        company_id:
+          companyId,
+
         campaign_id:
           campaignId,
 
@@ -470,7 +493,7 @@ async function recordFailedSubscribers({
 // LOAD ACTIVE SUBSCRIBERS
 // -----------------------------------------
 
-async function loadActiveSubscribers() {
+async function loadActiveSubscribers(companyId: string) {
   const {
     count,
     error: countError,
@@ -480,6 +503,7 @@ async function loadActiveSubscribers() {
       count: "exact",
       head: true,
     })
+    .eq("company_id", companyId)
     .eq("active", true);
 
   if (countError) {
@@ -504,6 +528,7 @@ async function loadActiveSubscribers() {
       .select(
         "id,name,email,unsubscribe_token"
       )
+      .eq("company_id", companyId)
       .eq("active", true)
       .order("id", {
         ascending: true,
@@ -559,6 +584,7 @@ async function loadActiveSubscribers() {
 // -----------------------------------------
 
 async function loadAlreadySent(
+  companyId: string,
   campaignId: number
 ) {
   const sentSubscriberIds =
@@ -576,6 +602,10 @@ async function loadAlreadySent(
       )
       .select(
         "subscriber_id"
+      )
+      .eq(
+        "company_id",
+        companyId
       )
       .eq(
         "campaign_id",
@@ -636,6 +666,7 @@ async function loadAlreadySent(
 // -----------------------------------------
 
 async function loadCampaign(
+  companyId: string,
   campaignId: number
 ) {
   const {
@@ -655,6 +686,10 @@ async function loadCampaign(
       button_link,
       status
       `
+    )
+    .eq(
+      "company_id",
+      companyId
     )
     .eq(
       "id",
@@ -735,7 +770,48 @@ export async function POST(
       proofEmail,
       sendToAll,
       campaignId,
+      companySlug,
     } = body;
+
+    const tenant =
+      await requireCompanyAccess(
+        String(companySlug ?? "").trim()
+      );
+
+    const companyId =
+      tenant.company.id;
+
+    const {
+      data: company,
+      error: companyError,
+    } = await supabase
+      .from("companies")
+      .select(
+        "id,name,slug,logo_url,primary_colour,secondary_colour,sender_name,sender_email,reply_to_email"
+      )
+      .eq("id", companyId)
+      .eq("active", true)
+      .maybeSingle();
+
+    if (companyError || !company) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Company could not be loaded.",
+        },
+        { status: 404 }
+      );
+    }
+
+    const companyFromEmail =
+      company.sender_email
+        ? `${company.sender_name || company.name} <${company.sender_email}>`
+        : fromEmail;
+
+    const companyReplyTo =
+      company.reply_to_email ||
+      replyTo;
 
     // -----------------------------------------
     // PROOF EMAIL
@@ -809,6 +885,7 @@ const {
   .select(
     "id,name,email,unsubscribe_token,active"
   )
+  .eq("company_id", companyId)
   .ilike(
     "email",
     cleanProofEmail
@@ -837,7 +914,7 @@ const matches =
           {
             success: false,
             error:
-              `No subscriber found for ${cleanProofEmail}.`,
+              `No ${company.name} subscriber found for ${cleanProofEmail}.`,
           },
           {
             status: 404,
@@ -866,6 +943,7 @@ const matches =
       const html =
         createEmailHtml({
           subscriber,
+          company,
           heading,
           content,
           buttonText,
@@ -879,9 +957,10 @@ const matches =
       } =
         await resend.emails.send({
           from:
-            fromEmail,
+            companyFromEmail,
 
-          replyTo,
+          replyTo:
+            companyReplyTo,
 
           to:
             cleanProofEmail,
@@ -957,6 +1036,7 @@ const matches =
 
       const storedCampaign =
         await loadCampaign(
+          companyId,
           currentCampaignId
         );
 
@@ -1040,6 +1120,10 @@ const matches =
             "sending",
         })
         .eq(
+          "company_id",
+          companyId
+        )
+        .eq(
           "id",
           currentCampaignId
         );
@@ -1101,6 +1185,9 @@ const matches =
           "announcement_campaigns"
         )
         .insert({
+          company_id:
+            companyId,
+
           subject:
             campaignContent
               .subject,
@@ -1156,10 +1243,13 @@ const matches =
     // -----------------------------------------
 
     const subscribers =
-      await loadActiveSubscribers();
+      await loadActiveSubscribers(
+        companyId
+      );
 
     const alreadySent =
       await loadAlreadySent(
+        companyId,
         currentCampaignId
       );
 
@@ -1200,6 +1290,10 @@ const matches =
             new Date()
               .toISOString(),
         })
+        .eq(
+          "company_id",
+          companyId
+        )
         .eq(
           "id",
           currentCampaignId
@@ -1316,6 +1410,8 @@ const matches =
         });
 
         await recordFailedSubscribers({
+          companyId,
+
           campaignId:
             currentCampaignId,
 
@@ -1374,9 +1470,10 @@ const matches =
         validItems.map(
           (item) => ({
             from:
-              fromEmail,
+              companyFromEmail,
 
-            replyTo,
+            replyTo:
+              companyReplyTo,
 
             to:
               item.cleanEmail,
@@ -1389,6 +1486,8 @@ const matches =
               createEmailHtml({
                 subscriber:
                   item.subscriber,
+
+                company,
 
                 heading:
                   campaignContent
@@ -1498,6 +1597,8 @@ const matches =
         });
 
         await recordFailedSubscribers({
+          companyId,
+
           campaignId:
             currentCampaignId,
 
@@ -1578,6 +1679,9 @@ const matches =
             item,
             batchIndex
           ) => ({
+            company_id:
+              companyId,
+
             campaign_id:
               currentCampaignId,
 
