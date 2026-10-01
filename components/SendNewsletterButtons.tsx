@@ -2,207 +2,223 @@
 
 import { useState } from "react";
 
-export default function SendNewsletterButtons() {
+type Props = {
+  companySlug: string;
+  companyName: string;
+  issueId: number;
+};
+
+type Preview = {
+  audience: {
+    active: number;
+    alreadySent: number;
+    pending: number;
+  };
+  recipients: Array<{
+    id: number;
+    name: string | null;
+    email: string;
+  }>;
+};
+
+export default function SendNewsletterButtons({
+  companySlug,
+  companyName,
+  issueId,
+}: Props) {
+  const [preview, setPreview] = useState<Preview | null>(null);
   const [proofEmail, setProofEmail] = useState("");
-  const [sendingRecovery, setSendingRecovery] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [sendingProof, setSendingProof] = useState(false);
+  const [sending, setSending] = useState(false);
 
-  async function resumeCampaign() {
+  async function previewAudience() {
+    try {
+      setChecking(true);
 
-  if (
-    !confirm(
-      "Resume this newsletter campaign?\n\nOnly subscribers who have NOT already received this issue will be emailed."
-    )
-  ) {
-    return;
-  }
-
-  const response = await fetch(
-    "/api/resume-newsletter",
-    {
-      method: "POST",
-    }
-  );
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    alert(data.error ?? "Resume failed.");
-    return;
-  }
-
-alert(
-  `Campaign resumed.\n\n` +
-  `Sent: ${data.sent}\n` +
-  `Skipped: ${data.skipped}`
-);
-
-window.dispatchEvent(
-  new Event("campaign-status-updated")
-);
-
-}
-
-  async function sendRecovery() {
-
-  const ok = confirm(
-`You are about to resend ONLY the subscribers identified by Campaign Recovery.
-
-Subscribers who have already been recovered will NOT receive another email.
-
-Do you want to continue?`
-  );
-
-  if (!ok) return;
-
-  try {
-
-    setSendingRecovery(true);
-
-    const res = await fetch(
-      "/api/campaign-recovery/send",
-      {
+      const res = await fetch("/api/send-newsletter/preview", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companySlug, issueId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "Unable to preview campaign.");
+        return;
       }
-    );
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert(data.error ?? "Recovery failed.");
-      return;
+      setPreview(data);
+    } finally {
+      setChecking(false);
     }
-
-alert(
-  `Recovery Complete!\n\n` +
-  `Recovered: ${data.found}\n` +
-  `Sent: ${data.sent}\n` +
-  `Remaining: ${data.remaining}`
-);
-
-window.dispatchEvent(
-  new Event("campaign-status-updated")
-);
-
-  } finally {
-
-    setSendingRecovery(false);
-
   }
-}
 
-  async function sendTest() {
-    const res = await fetch("/api/send-test", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email: proofEmail,
-      }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert(data.error || "Failed to send.");
+  async function sendProof() {
+    if (!proofEmail.trim()) {
+      alert("Enter an existing subscriber email for this company.");
       return;
     }
 
-    alert("✅ Proof email sent successfully!");
+    try {
+      setSendingProof(true);
+
+      const res = await fetch("/api/send-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companySlug,
+          issueId,
+          email: proofEmail.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "Proof email failed.");
+        return;
+      }
+
+      alert(
+        `Proof email sent successfully.\n\n` +
+        `Company: ${data.company.name}\n` +
+        `Issue: ${data.issue.number}\n` +
+        `Recipient: ${data.subscriber.email}`
+      );
+    } finally {
+      setSendingProof(false);
+    }
   }
 
   async function sendNewsletter() {
-const ok = confirm(
-`You are about to email the newsletter to ALL active subscribers.
+    if (!preview) return;
 
-Every subscriber will receive:
-• Their own personalised newsletter link
-• Their own unsubscribe link
+    const ok = confirm(
+      `Send this newsletter for ${companyName}?\n\n` +
+      `Active: ${preview.audience.active}\n` +
+      `Already sent: ${preview.audience.alreadySent}\n` +
+      `Pending: ${preview.audience.pending}\n\n` +
+      `This action cannot be undone.`
+    );
 
-This action cannot be undone.
+    if (!ok) return;
 
-Do you want to continue?`
-);
+    try {
+      setSending(true);
 
-if (!ok) return;
+      const res = await fetch("/api/send-newsletter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companySlug, issueId }),
+      });
 
-    const res = await fetch("/api/send-newsletter", {
-      method: "POST",
-    });
+      const data = await res.json();
 
-    const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Newsletter send failed.");
+        return;
+      }
 
-    if (!res.ok) {
-      alert(data.error);
-      return;
+      alert(
+        `Campaign complete.\n\n` +
+        `Total: ${data.total}\n` +
+        `Sent: ${data.sent}\n` +
+        `Skipped: ${data.skipped}\n` +
+        `Failed: ${data.failedCount}\n` +
+        `Remaining: ${data.remaining}`
+      );
+
+      await previewAudience();
+    } finally {
+      setSending(false);
     }
-
-alert(
-  `Newsletter complete!\n\n` +
-  `Total: ${data.total}\n` +
-  `Sent: ${data.sent}\n` +
-  `Failed: ${data.failedCount}`
-);
-
-window.dispatchEvent(
-  new Event("campaign-status-updated")
-);
   }
 
   return (
     <div className="space-y-6">
+      <div className="rounded-lg border bg-white p-5">
+        <h3 className="font-bold">Send Proof Email</h3>
 
-      <div>
+        <p className="mt-1 text-sm text-slate-500">
+          Enter an existing subscriber email belonging to {companyName}.
+          The server rejects subscribers from another company.
+        </p>
 
-        <label className="mb-2 block font-semibold">
-          Proof Email Recipient
-        </label>
+        <div className="mt-4 flex max-w-2xl flex-wrap gap-3">
+          <input
+            type="email"
+            value={proofEmail}
+            onChange={(event) => setProofEmail(event.target.value)}
+            placeholder="subscriber@example.com"
+            className="min-w-72 flex-1 rounded border p-3"
+          />
 
-        <input
-          type="email"
-          value={proofEmail}
-          onChange={(e) => setProofEmail(e.target.value)}
-          placeholder="paul@example.com"
-          className="w-full max-w-md rounded border p-3"
-        />
-
+          <button
+            type="button"
+            onClick={sendProof}
+            disabled={sendingProof}
+            className="rounded bg-slate-700 px-5 py-3 font-semibold text-white disabled:opacity-50"
+          >
+            {sendingProof ? "Sending Proof..." : "Send Proof Email"}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-4">
-
         <button
-          onClick={sendTest}
-          className="rounded bg-green-700 px-6 py-3 font-semibold text-white hover:bg-green-800"
+          type="button"
+          onClick={previewAudience}
+          disabled={checking || sending}
+          className="rounded bg-blue-700 px-6 py-3 font-semibold text-white disabled:opacity-50"
         >
-          Send Proof Email
+          {checking ? "Checking..." : "Preview Campaign Audience"}
         </button>
 
         <button
+          type="button"
           onClick={sendNewsletter}
-          className="rounded bg-[#1E2D5A] px-6 py-3 font-semibold text-white hover:bg-blue-900"
+          disabled={!preview || sending || preview.audience.pending === 0}
+          className="rounded bg-green-700 px-6 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Send Newsletter
+          {sending ? "Sending..." : "Send Newsletter"}
         </button>
-
-        <button
-  onClick={resumeCampaign}
-  className="rounded bg-orange-600 px-6 py-3 text-white hover:bg-orange-700"
->
-  Resume Campaign
-</button>
-
-<button
-  onClick={sendRecovery}
-  disabled={sendingRecovery}
-  className="rounded bg-purple-700 px-6 py-3 text-white hover:bg-purple-800 disabled:bg-gray-400"
->
-  {sendingRecovery
-    ? "Recovering..."
-    : "Recovery Emails"}
-</button>
-
       </div>
 
+      {preview && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-5">
+          <h3 className="font-bold text-blue-900">Campaign Audience Preview</h3>
+
+          <p className="mt-3">
+            Active: <strong>{preview.audience.active}</strong> ·
+            Already sent: <strong>{preview.audience.alreadySent}</strong> ·
+            Pending: <strong>{preview.audience.pending}</strong>
+          </p>
+
+          <div className="mt-4 max-h-56 overflow-y-auto rounded border bg-white">
+            {preview.recipients.map((recipient) => (
+              <div
+                key={recipient.id}
+                className="border-b px-4 py-3 text-sm last:border-b-0"
+              >
+                <strong>{recipient.name || "Unnamed subscriber"}</strong>
+                <span className="ml-2 text-slate-500">{recipient.email}</span>
+              </div>
+            ))}
+
+            {preview.recipients.length === 0 && (
+              <div className="p-4 text-sm text-slate-500">
+                No pending recipients.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        Resume and recovery remain temporarily disabled until those routes are converted to the same tenant-safe model.
+      </div>
     </div>
   );
 }
