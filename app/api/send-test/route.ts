@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     const { data: company, error: companyError } = await supabase
       .from("companies")
-      .select("id,name,slug,logo_url,primary_colour,secondary_colour,website_url,sender_name,reply_to_email")
+      .select("id,name,slug,logo_url,primary_colour,secondary_colour,website_url,sender_name,sender_email,reply_to_email")
       .eq("id", companyId)
       .eq("active", true)
       .maybeSingle();
@@ -162,8 +162,13 @@ export async function POST(request: NextRequest) {
       </html>
     `;
 
+    const companyFromEmail =
+      company.sender_email
+        ? `${company.sender_name || company.name} <${company.sender_email}>`
+        : fromEmail;
+
     const { data, error: resendError } = await resend.emails.send({
-      from: fromEmail,
+      from: companyFromEmail,
       replyTo: company.reply_to_email || defaultReplyTo,
       to: subscriber.email,
       subject: `[PROOF] ${company.name} Newsletter – Issue ${issue.issue_number ?? issue.id}`,
