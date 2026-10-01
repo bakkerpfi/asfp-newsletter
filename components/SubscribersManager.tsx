@@ -278,6 +278,67 @@ export default function SubscribersManager({
   }
 
   // =====================================================
+  // DEACTIVATE SUBSCRIBER
+  // =====================================================
+
+  async function deactivateSubscriber(
+    subscriber: Subscriber
+  ) {
+    const confirmed =
+      confirm(
+        `Deactivate ${subscriber.email} for ${currentCompany.name}?\n\nThey will remain in the subscriber list but will no longer receive campaigns.`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        "/api/subscribers/deactivate",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            id:
+              subscriber.id,
+            companySlug:
+              currentCompany.slug,
+          }),
+        }
+      );
+
+      const result =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !result.success
+      ) {
+        alert(
+          result.error ||
+            "Unable to deactivate subscriber."
+        );
+        return;
+      }
+
+      await loadSubscribers();
+    } catch (err) {
+      console.error(
+        "DEACTIVATE SUBSCRIBER ERROR:",
+        err
+      );
+
+      alert(
+        "Unable to deactivate subscriber."
+      );
+    }
+  }
+
+  // =====================================================
   // REACTIVATE SUBSCRIBER
   // =====================================================
 
@@ -468,7 +529,7 @@ async function importExcel(
     }
 
     alert(
-      `Import Complete – ${currentCompany.name}
+      `Import Complete â€“ ${currentCompany.name}
 
 Spreadsheet Rows: ${result.totalRows}
 Imported: ${result.imported}
@@ -964,31 +1025,63 @@ function exportUrl(
 
                         {subscriber.active ? (
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              deleteSubscriber(
-                                subscriber
-                              )
-                            }
-                            className="rounded bg-red-500 px-4 py-2 text-white hover:bg-red-600"
-                          >
-                            Delete
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                deactivateSubscriber(
+                                  subscriber
+                                )
+                              }
+                              className="rounded bg-orange-500 px-4 py-2 text-white hover:bg-orange-600"
+                            >
+                              Deactivate
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                deleteSubscriber(
+                                  subscriber
+                                )
+                              }
+                              className="rounded border border-red-300 bg-white px-4 py-2 text-red-600 hover:bg-red-50"
+                            >
+                              Delete
+                            </button>
+
+                          </div>
 
                         ) : (
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              reactivateSubscriber(
-                                subscriber
-                              )
-                            }
-                            className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
-                          >
-                            Reactivate
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                reactivateSubscriber(
+                                  subscriber
+                                )
+                              }
+                              className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+                            >
+                              Reactivate
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                deleteSubscriber(
+                                  subscriber
+                                )
+                              }
+                              className="rounded border border-red-300 bg-white px-4 py-2 text-red-600 hover:bg-red-50"
+                            >
+                              Delete
+                            </button>
+
+                          </div>
 
                         )}
 
