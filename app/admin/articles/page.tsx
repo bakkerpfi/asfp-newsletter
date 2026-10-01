@@ -1,208 +1,156 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import AdminSidebar from "@/components/AdminSidebar";
+import ArticlesManager from "@/components/ArticlesManager";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { redirect } from "next/navigation";
 
-export default function ArticlesPage() {
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("");
-  const [author, setAuthor] = useState("");
-  const [content, setContent] = useState("");
-  const [issueId, setIssueId] = useState("");
-const [issues, setIssues] = useState<any[]>([]);
+type ArticlesPageProps = {
+  searchParams: Promise<{
+    company?: string;
+  }>;
+};
 
-  const [articles, setArticles] = useState<any[]>([]);
-  const [editingId, setEditingId] = useState<number | null>(null);
+type Company = {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  primary_colour: string;
+  secondary_colour: string;
+};
 
-  async function loadIssues() {
-  const response = await fetch("/api/issues");
-  const data = await response.json();
+export default async function ArticlesPage({
+  searchParams,
+}: ArticlesPageProps) {
+  const params = await searchParams;
 
-  setIssues(data);
+  const supabase =
+    await createSupabaseServerClient();
 
-  if (data.length > 0) {
-    setIssueId(String(data[0].id));
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
   }
-}
 
-  async function loadArticles() {
-    const response = await fetch("/api/articles");
-    const data = await response.json();
+  const { data: profile } =
+    await supabase
+      .from("profiles")
+      .select(
+        "id,full_name,platform_admin"
+      )
+      .eq("id", user.id)
+      .single();
 
-    setArticles(data);
+  const { data: memberships } =
+    await supabase
+      .from("company_users")
+      .select(
+        "company_id,role"
+      )
+      .eq("user_id", user.id);
+
+  const companyIds =
+    memberships?.map(
+      (membership) =>
+        membership.company_id
+    ) ?? [];
+
+  let companies: Company[] = [];
+
+  if (companyIds.length > 0) {
+    const { data } =
+      await supabase
+        .from("companies")
+        .select(
+          "id,name,slug,logo_url,primary_colour,secondary_colour"
+        )
+        .in("id", companyIds)
+        .eq("active", true)
+        .order("name", {
+          ascending: true,
+        });
+
+    companies =
+      (data ?? []) as Company[];
   }
 
-async function saveArticle() {
-  const url = editingId
-    ? "/api/articles/update"
-    : "/api/articles";
+  if (companies.length === 0) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 p-8">
 
-  await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      id: editingId,
-      issue_id: Number(issueId),
-      title,
-      category,
-      author,
-      content,
-    }),
-  });
+        <div className="max-w-lg rounded-xl bg-white p-10 text-center shadow">
 
-  setTitle("");
-  setCategory("");
-  setAuthor("");
-  setContent("");
-  setEditingId(null);
+          <h1 className="text-2xl font-bold">
+            No Company Access
+          </h1>
 
-  loadArticles();
-}
-
-useEffect(() => {
-  loadArticles();
-  loadIssues();
-}, []);
-
-  return (
-    <div className="flex">
-      <AdminSidebar />
-
-      <main className="flex-1 bg-slate-100 p-10">
-
-        <h1 className="text-4xl font-bold text-[#1E2D5A]">
-          Articles
-        </h1>
-
-        <div className="mt-8 rounded-xl bg-white p-8 shadow">
-
-<div className="grid gap-4">
-
-  <select
-    className="border rounded p-3"
-    value={issueId}
-    onChange={(e) => setIssueId(e.target.value)}
-  >
-    {issues.map((issue) => (
-      <option
-        key={issue.id}
-        value={issue.id}
-      >
-        Issue {issue.issue_number} - {issue.title}
-      </option>
-    ))}
-  </select>
-
-  <input
-    className="border rounded p-3"
-    placeholder="Article Title"
-    value={title}
-    onChange={(e) => setTitle(e.target.value)}
-  />
-
-  <input
-    className="border rounded p-3"
-    placeholder="Category"
-    value={category}
-    onChange={(e) => setCategory(e.target.value)}
-  />
-
-  <input
-    className="border rounded p-3"
-    placeholder="Author"
-    value={author}
-    onChange={(e) => setAuthor(e.target.value)}
-  />
-
-  <textarea
-    className="border rounded p-3 h-40"
-    placeholder="Article Content"
-    value={content}
-    onChange={(e) => setContent(e.target.value)}
-  />
-
-<button
-  onClick={saveArticle}
-  className="rounded bg-red-500 px-6 py-3 text-white"
->
-  {editingId
-    ? "Update Article"
-    : "Save Article"}
-</button>
-
-          </div>
-
-        </div>
-
-        <div className="mt-8 rounded-xl bg-white p-8 shadow">
-
-          <h2 className="mb-4 text-2xl font-bold">
-            Articles
-          </h2>
-
-          {articles.map((article) => (
-            <div
-              key={article.id}
-              className="mb-4 rounded border p-4"
-            >
-              <h3 className="font-bold">
-                {article.title}
-              </h3>
-
-              <p className="text-sm text-slate-500">
-                {article.category}
-              </p>
-
-              <p className="mt-2">
-                {article.content}
-              </p>
-
-<button
-  onClick={() => {
-    setEditingId(article.id);
-    setIssueId(String(article.issue_id));
-    setTitle(article.title);
-    setCategory(article.category);
-    setAuthor(article.author);
-    setContent(article.content);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  }}
-  className="mr-2 mt-3 rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
->
-  Edit
-</button>
-
-              <button
-  onClick={async () => {
-    await fetch("/api/articles/delete", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        id: article.id,
-      }),
-    });
-
-    window.location.reload();
-  }}
-  className="mt-3 rounded bg-red-500 px-4 py-2 text-white hover:bg-red-600"
->
-  Delete
-</button>
-            </div>
-            
-          ))}
+          <p className="mt-4 text-slate-600">
+            Your account has not been
+            assigned to an organisation.
+          </p>
 
         </div>
 
       </main>
+    );
+  }
+
+  const requestedCompany =
+    params.company
+      ? companies.find(
+          (company) =>
+            company.slug ===
+            params.company
+        )
+      : null;
+
+  const currentCompany =
+    requestedCompany ??
+    companies[0];
+
+  return (
+    <div className="flex">
+
+      <AdminSidebar
+        companies={companies}
+        currentCompany={currentCompany}
+        platformAdmin={
+          profile?.platform_admin ??
+          false
+        }
+      />
+
+      <main className="flex-1 bg-slate-100 p-10">
+
+        <h1
+          className="text-4xl font-bold"
+          style={{
+            color:
+              currentCompany.primary_colour,
+          }}
+        >
+          Articles
+        </h1>
+
+        <p className="mt-2 text-slate-600">
+          Create and manage newsletter
+          articles for{" "}
+          <strong>
+            {currentCompany.name}
+          </strong>
+          .
+        </p>
+
+        <ArticlesManager
+          currentCompany={
+            currentCompany
+          }
+        />
+
+      </main>
+
     </div>
   );
 }

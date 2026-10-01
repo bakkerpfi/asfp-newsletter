@@ -1,205 +1,183 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import AdminSidebar from "@/components/AdminSidebar";
+import IssuesManager from "@/components/IssuesManager";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { redirect } from "next/navigation";
 
-export default function IssuesPage() {
-  const [title, setTitle] = useState("");
-  const [issueNumber, setIssueNumber] = useState("");
-  const [month, setMonth] = useState("");
-  const [year, setYear] = useState("2026");
-  const [summary, setSummary] = useState("");
+type IssuesPageProps = {
+  searchParams: Promise<{
+    company?: string;
+  }>;
+};
 
-  const [issues, setIssues] = useState<any[]>([]);
-  const [editingId, setEditingId] = useState<number | null>(null);
+type Company = {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  primary_colour: string;
+  secondary_colour: string;
+};
 
-  async function loadIssues() {
-    const response = await fetch("/api/issues");
-    const data = await response.json();
-    setIssues(data);
+export default async function IssuesPage({
+  searchParams,
+}: IssuesPageProps) {
+  const params = await searchParams;
+
+  // =====================================================
+  // AUTHENTICATED USER
+  // =====================================================
+
+  const supabase =
+    await createSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
   }
 
-  async function saveIssue() {
-const response = await fetch("/api/issues", {
-  method: editingId ? "PUT" : "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-body: JSON.stringify({
-  id: editingId,
-  title,
-  issue_number: issueNumber,
-  month,
-  year,
-  summary,
-}),
-    });
+  // =====================================================
+  // PROFILE
+  // =====================================================
 
-    if (!response.ok) {
-      alert("Unable to save issue.");
-      return;
-    }
+  const { data: profile } =
+    await supabase
+      .from("profiles")
+      .select(
+        "id,full_name,platform_admin"
+      )
+      .eq("id", user.id)
+      .single();
 
-    setTitle("");
-    setIssueNumber("");
-    setMonth("");
-    setSummary("");
-    setEditingId(null);
+  // =====================================================
+  // COMPANY MEMBERSHIPS
+  // =====================================================
 
-    loadIssues();
+  const { data: memberships } =
+    await supabase
+      .from("company_users")
+      .select(
+        "company_id,role"
+      )
+      .eq("user_id", user.id);
+
+  const companyIds =
+    memberships?.map(
+      (membership) =>
+        membership.company_id
+    ) ?? [];
+
+  // =====================================================
+  // AUTHORISED COMPANIES
+  // =====================================================
+
+  let companies: Company[] = [];
+
+  if (companyIds.length > 0) {
+    const { data: companyData } =
+      await supabase
+        .from("companies")
+        .select(
+          "id,name,slug,logo_url,primary_colour,secondary_colour"
+        )
+        .in("id", companyIds)
+        .eq("active", true)
+        .order("name", {
+          ascending: true,
+        });
+
+    companies =
+      (companyData ?? []) as Company[];
   }
 
-  function editIssue(issue: any) {
-  setEditingId(issue.id);
+  // =====================================================
+  // NO COMPANY ACCESS
+  // =====================================================
 
-  setTitle(issue.title);
-  setIssueNumber(String(issue.issue_number));
-  setMonth(issue.month);
-  setYear(String(issue.year));
-  setSummary(issue.summary ?? "");
-}
+  if (companies.length === 0) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 p-8">
 
-  useEffect(() => {
-    loadIssues();
-  }, []);
+        <div className="max-w-lg rounded-xl bg-white p-10 text-center shadow">
+
+          <h1 className="text-2xl font-bold text-slate-900">
+            No Company Access
+          </h1>
+
+          <p className="mt-4 text-slate-600">
+            Your account has not been assigned
+            to an organisation.
+          </p>
+
+        </div>
+
+      </main>
+    );
+  }
+
+  // =====================================================
+  // CURRENT COMPANY
+  // =====================================================
+
+  const requestedCompany =
+    params.company
+      ? companies.find(
+          (company) =>
+            company.slug ===
+            params.company
+        )
+      : null;
+
+  const currentCompany =
+    requestedCompany ??
+    companies[0];
+
+  // =====================================================
+  // PAGE
+  // =====================================================
 
   return (
     <div className="flex">
-      <AdminSidebar />
+
+      <AdminSidebar
+        companies={companies}
+        currentCompany={currentCompany}
+        platformAdmin={
+          profile?.platform_admin ??
+          false
+        }
+      />
 
       <main className="flex-1 bg-slate-100 p-10">
-        <h1 className="text-4xl font-bold text-[#1E2D5A]">
+
+        <h1
+          className="text-4xl font-bold"
+          style={{
+            color:
+              currentCompany.primary_colour,
+          }}
+        >
           Newsletter Issues
         </h1>
 
-        <div className="mt-8 rounded-xl bg-white p-8 shadow">
-          <div className="grid gap-4">
-            <input
-              className="rounded border p-3"
-              placeholder="Title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+        <p className="mt-2 text-slate-600">
+          Create and manage newsletter issues for{" "}
+          <strong>
+            {currentCompany.name}
+          </strong>
+          .
+        </p>
 
-            <input
-              className="rounded border p-3"
-              placeholder="Issue Number"
-              value={issueNumber}
-              onChange={(e) => setIssueNumber(e.target.value)}
-            />
+        <IssuesManager
+          currentCompany={
+            currentCompany
+          }
+        />
 
-            <input
-              className="rounded border p-3"
-              placeholder="Month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-            />
-
-            <input
-              className="rounded border p-3"
-              placeholder="Year"
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
-            />
-
-            <textarea
-              className="rounded border p-3"
-              placeholder="Summary"
-              value={summary}
-              onChange={(e) => setSummary(e.target.value)}
-            />
-
-            <button
-              onClick={saveIssue}
-              className="rounded bg-red-500 px-6 py-3 text-white hover:bg-red-600"
-            >
-              {editingId ? "Save Changes" : "Create Issue"}
-            </button>
-
-{editingId && (
-  <button
-    onClick={() => {
-      setEditingId(null);
-      setTitle("");
-      setIssueNumber("");
-      setMonth("");
-      setYear("2026");
-      setSummary("");
-    }}
-    className="rounded bg-slate-500 px-6 py-3 text-white hover:bg-slate-600"
-  >
-    Cancel
-  </button>
-)}
-
-          </div>
-        </div>
-
-        <div className="mt-8 rounded-xl bg-white p-8 shadow">
-          <h2 className="mb-4 text-2xl font-bold">
-            Existing Issues
-          </h2>
-
-          {issues.length === 0 && (
-            <p className="text-slate-500">
-              No issues found.
-            </p>
-          )}
-
-          {issues.map((issue) => (
-            <div
-              key={issue.id}
-              className="mb-4 rounded border p-4"
-            >
-              <h3 className="font-bold">
-                {issue.title}
-              </h3>
-
-              <p>
-                Issue {issue.issue_number}
-              </p>
-
-              <p>
-                {issue.month} {issue.year}
-              </p>
-
-              <button
-  onClick={() => editIssue(issue)}
-  className="mt-4 mr-3 rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
->
-  Edit Issue
-</button>
-
-              <button
-                onClick={async () => {
-                  if (
-                    !confirm(
-                      "Delete this issue and all associated articles and polls?"
-                    )
-                  ) {
-                    return;
-                  }
-
-                  await fetch("/api/issues/delete", {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      id: issue.id,
-                    }),
-                  });
-
-                  loadIssues();
-                }}
-                className="mt-4 rounded bg-red-500 px-4 py-2 text-white hover:bg-red-600"
-              >
-                Delete Issue
-              </button>
-            </div>
-          ))}
-        </div>
       </main>
+
     </div>
   );
 }
