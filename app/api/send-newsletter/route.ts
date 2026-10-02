@@ -9,9 +9,11 @@ const WEBSITE_URL =
   process.env.WEBSITE_URL ||
   "http://localhost:3000";
 
-const RESEND_BATCH_SIZE = 100;
+const RESEND_BATCH_SIZE = 10;
 const DATABASE_PAGE_SIZE = 1000;
-const BATCH_DELAY_MS = 300;
+const BATCH_DELAY_MS = 1500;
+const MAX_BATCH_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 3000;
 
 type Subscriber = {
   id: number;
@@ -432,7 +434,7 @@ export async function POST(
 
     /*
      * Send pending subscribers in Resend
-     * batches of no more than 100.
+     * conservative batches of no more than 10.
      */
     for (
       let index = 0;
@@ -466,20 +468,38 @@ export async function POST(
           index / RESEND_BATCH_SIZE
         ) + 1;
 
-      const {
-        data,
-        error: resendError,
-      } = await resend.batch.send(emails);
+      let data: any = null;
+      let resendError: any = null;
+
+      for (
+        let attempt = 1;
+        attempt <= MAX_BATCH_ATTEMPTS;
+        attempt++
+      ) {
+        const result =
+          await resend.batch.send(emails);
+
+        data = result.data;
+        resendError = result.error;
+
+        if (!resendError) {
+          break;
+        }
+
+        console.error(
+          `BATCH ${batchNumber} ATTEMPT ${attempt} FAILED:`,
+          resendError
+        );
+
+        if (attempt < MAX_BATCH_ATTEMPTS) {
+          await delay(RETRY_DELAY_MS);
+        }
+      }
 
       if (resendError) {
         const reason =
           resendError.message ||
           "Unknown batch sending error.";
-
-        console.error(
-          `BATCH ${batchNumber} FAILED:`,
-          resendError
-        );
 
         failed.push({
           emails: subscriberBatch.map(
@@ -489,8 +509,13 @@ export async function POST(
           reason,
         });
 
-        await delay(BATCH_DELAY_MS);
-        continue;
+        /*
+         * Stop after an exhausted batch rather than
+         * racing ahead into later recipients.
+         * A subsequent Resume safely skips recipients
+         * already recorded as sent.
+         */
+        break;
       }
 
       const resendResults =

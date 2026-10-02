@@ -6,6 +6,7 @@ type Props = {
   companySlug: string;
   companyName: string;
   issueId: number;
+  issueNumber: string | number;
 };
 
 type Preview = {
@@ -25,16 +26,19 @@ export default function SendNewsletterButtons({
   companySlug,
   companyName,
   issueId,
+  issueNumber,
 }: Props) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [proofEmail, setProofEmail] = useState("");
   const [checking, setChecking] = useState(false);
   const [sendingProof, setSendingProof] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendConfirmation, setSendConfirmation] = useState("");
 
   async function previewAudience() {
     try {
       setChecking(true);
+      setSendConfirmation("");
 
       const res = await fetch("/api/send-newsletter/preview", {
         method: "POST",
@@ -95,6 +99,14 @@ export default function SendNewsletterButtons({
   async function sendNewsletter() {
     if (!preview) return;
 
+    const requiredConfirmation =
+      `SEND ${preview.audience.pending}`;
+
+    if (sendConfirmation.trim() !== requiredConfirmation) {
+      alert(`Type ${requiredConfirmation} exactly before sending.`);
+      return;
+    }
+
 const isResume =
   preview.audience.alreadySent > 0;
 
@@ -146,6 +158,7 @@ const ok = confirm(
         `Remaining: ${data.remaining}`
       );
 
+      setSendConfirmation("");
       await previewAudience();
     } finally {
       setSending(false);
@@ -182,6 +195,34 @@ const ok = confirm(
         </div>
       </div>
 
+      {preview && preview.audience.pending > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-5">
+          <h3 className="font-bold text-red-900">Final Send Confirmation</h3>
+          <p className="mt-2 text-sm text-red-900">
+            You are about to {preview.audience.alreadySent > 0 ? "resume" : "send"}{" "}
+            <strong>{companyName}</strong> Issue{" "}
+            <strong>{issueNumber}</strong> to{" "}
+            <strong>{preview.audience.pending.toLocaleString()}</strong>{" "}
+            pending recipient{preview.audience.pending === 1 ? "" : "s"}.
+          </p>
+          <p className="mt-2 text-sm font-semibold text-red-800">
+            This action will send real emails.
+          </p>
+          <p className="mt-4 text-sm text-slate-700">
+            Type <strong>SEND {preview.audience.pending}</strong> to confirm:
+          </p>
+          <input
+            type="text"
+            value={sendConfirmation}
+            onChange={(event) => setSendConfirmation(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={`SEND ${preview.audience.pending}`}
+            className="mt-2 w-full max-w-md rounded border border-red-300 bg-white p-3 font-mono"
+          />
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-4">
         <button
           type="button"
@@ -198,7 +239,8 @@ const ok = confirm(
   disabled={
     !preview ||
     sending ||
-    preview.audience.pending === 0
+    preview.audience.pending === 0 ||
+    sendConfirmation.trim() !== `SEND ${preview.audience.pending}`
   }
   className="rounded bg-green-700 px-6 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
 >

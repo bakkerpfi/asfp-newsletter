@@ -122,11 +122,12 @@ export default async function EmailPage({ searchParams }: Props) {
                 Preview the audience before sending. The server independently verifies the issue and company.
               </p>
               <div className="mt-6">
-                <SendNewsletterButtons
-                  companySlug={currentCompany.slug}
-                  companyName={currentCompany.name}
-                  issueId={issue.id}
-                />
+<SendNewsletterButtons
+  companySlug={currentCompany.slug}
+  companyName={currentCompany.name}
+  issueId={issue.id}
+  issueNumber={issue.issue_number ?? issue.id}
+/>
               </div>
             </div>
           </>
