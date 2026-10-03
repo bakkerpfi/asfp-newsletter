@@ -39,7 +39,7 @@ export default async function CompanySettingsPage({searchParams}:Props) {
   return <div className="flex">
     <AdminSidebar companies={companies} currentCompany={currentCompany} platformAdmin={profile?.platform_admin??false}/>
     <main className="flex-1 bg-slate-100 p-10">
-      <h1 className="text-4xl font-bold" style={{color:currentCompany.primary_colour}}>Company Settings</h1>
+      <h1 className="text-4xl font-bold text-slate-900">Company Settings</h1>
       <p className="mt-2 text-slate-600">Manage branding and email identity for <strong>{currentCompany.name}</strong>.</p>
       <CompanySettingsManager initialCompany={currentCompany}/>
     </main>

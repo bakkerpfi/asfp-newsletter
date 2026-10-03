@@ -82,7 +82,7 @@ export default async function EmailPage({ searchParams }: Props) {
       />
 
       <main className="flex-1 bg-slate-100 p-10">
-        <h1 className="text-4xl font-bold" style={{ color: currentCompany.primary_colour }}>
+        <h1 className="text-4xl font-bold text-slate-900">
           Newsletter Campaign
         </h1>
         <p className="mt-2 text-slate-600">
@@ -99,7 +99,7 @@ export default async function EmailPage({ searchParams }: Props) {
               <h2 className="text-2xl font-bold">{issue.title}</h2>
               <p className="mt-2 text-slate-600">Issue {issue.issue_number}</p>
               <p className="text-slate-600">{issue.month} {issue.year}</p>
-              <p className="mt-6 text-lg font-semibold" style={{ color: currentCompany.primary_colour }}>
+              <p className="mt-6 text-lg font-semibold text-slate-900">
                 Active Subscribers: {subscriberCount}
               </p>
               <div className="mt-6 rounded border bg-slate-50 p-6">

@@ -147,13 +147,10 @@ export default async function AdminPage({
   // COMPANY BRANDING
   // =====================================================
 
-  const primaryColour =
-    currentCompany.primary_colour ||
-    "#0F172A";
-
-  const secondaryColour =
-    currentCompany.secondary_colour ||
-    "#DC2626";
+  // Codexus application colours are fixed.
+  // Company colours are reserved for customer-facing communications.
+  const primaryColour = "#111318";
+  const secondaryColour = "#F97316";
 
   // =====================================================
   // TENANT-SCOPED SUBSCRIBERS

@@ -33,34 +33,34 @@ export default function AdminSidebar({
     )}`;
   }
 
-  const primaryColour =
-    currentCompany?.primary_colour ||
-    "#0F172A";
+const sidebarColour = "#111318";
 
   const secondaryColour =
     currentCompany?.secondary_colour ||
     "#DC2626";
 
   return (
-    <aside
-      className="min-h-screen w-72 text-white"
-      style={{
-        backgroundColor: primaryColour,
-      }}
-    >
+<aside
+  className="min-h-screen w-72 text-white"
+  style={{
+    backgroundColor: sidebarColour,
+  }}
+>
       {/* PLATFORM HEADER */}
 
       <div className="border-b border-white/10 p-6">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-3xl font-bold">
-          C
-        </div>
+<img
+  src="/Codexus-logo.png"
+  alt="Codexus"
+  className="mx-auto h-20 w-20 object-contain"
+/>
 
         <h2 className="mt-4 text-center text-xl font-bold">
-          Codexus Newsletter
+          CODEXUS
         </h2>
 
         <p className="mt-1 text-center text-sm text-white/70">
-          Communications Platform
+          Newsletter Platform
         </p>
       </div>
 
@@ -115,6 +115,20 @@ export default function AdminSidebar({
       {/* NAVIGATION */}
 
       <nav className="space-y-2 p-6">
+        {platformAdmin && (
+          <>
+            <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wider text-white/50">
+              Platform
+            </p>
+            <Link
+              href="/admin/companies"
+              className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-white/10"
+            >
+              Companies
+            </Link>
+            <div className="my-4 border-t border-white/10" />
+          </>
+        )}
         <Link
           href={companyHref("/admin")}
           className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-white/10"

@@ -529,7 +529,7 @@ async function importExcel(
     }
 
     alert(
-      `Import Complete â€“ ${currentCompany.name}
+      `Import Complete – ${currentCompany.name}
 
 Spreadsheet Rows: ${result.totalRows}
 Imported: ${result.imported}

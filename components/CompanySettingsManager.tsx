@@ -59,8 +59,33 @@ export default function CompanySettingsManager({initialCompany}:{initialCompany:
           <div className="mt-2 flex min-h-36 items-center justify-center rounded-lg p-6" style={{backgroundColor:company.primary_colour}}>
             {company.logo_url?<img src={company.logo_url} alt={company.name} className="max-h-24 max-w-full object-contain"/>:<span className="text-xl font-bold text-white">{company.name}</span>}
           </div>
-          <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={upload} disabled={uploading} className="mt-3 block w-full text-sm"/>
-          <p className="mt-2 text-xs text-slate-500">PNG, JPG, WebP or SVG. Maximum 2 MB.</p>
+          <label className="mt-4 flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-5 transition hover:border-slate-500 hover:bg-slate-100">
+  <div className="text-center">
+    <div className="font-semibold text-slate-900">
+      {uploading
+        ? "Uploading Logo..."
+        : company.logo_url
+        ? "Change Company Logo"
+        : "Upload Company Logo"}
+    </div>
+
+    <div className="mt-1 text-sm text-slate-500">
+      Click here to choose your logo
+    </div>
+
+    <div className="mt-1 text-xs text-slate-400">
+      PNG, JPG, WebP or SVG · Maximum 2 MB
+    </div>
+  </div>
+
+  <input
+    type="file"
+    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+    onChange={upload}
+    disabled={uploading}
+    className="hidden"
+  />
+</label>
         </div>
         <div className="space-y-5">
           {([["Primary Colour","primary_colour"],["Secondary Colour","secondary_colour"],["Accent Colour","accent_colour"]] as const).map(([label,key])=>{

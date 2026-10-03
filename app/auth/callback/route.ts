@@ -11,6 +11,17 @@ export async function GET(request: Request) {
   const origin =
     requestUrl.origin;
 
+  // Preserve a safe local return path.
+  const requestedNext =
+    requestUrl.searchParams.get("next");
+
+  const next =
+    requestedNext &&
+    requestedNext.startsWith("/") &&
+    !requestedNext.startsWith("//")
+      ? requestedNext
+      : "/admin";
+
   if (!code) {
     return NextResponse.redirect(
       `${origin}/login?error=missing_code`
@@ -49,9 +60,7 @@ export async function GET(request: Request) {
       }
     );
 
-  const {
-    error,
-  } =
+  const { error } =
     await supabase.auth.exchangeCodeForSession(
       code
     );
@@ -68,6 +77,6 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.redirect(
-    `${origin}/admin`
+    `${origin}${next}`
   );
 }

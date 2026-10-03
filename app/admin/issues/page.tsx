@@ -152,13 +152,7 @@ export default async function IssuesPage({
 
       <main className="flex-1 bg-slate-100 p-10">
 
-        <h1
-          className="text-4xl font-bold"
-          style={{
-            color:
-              currentCompany.primary_colour,
-          }}
-        >
+        <h1 className="text-4xl font-bold text-slate-900">
           Newsletter Issues
         </h1>
 
