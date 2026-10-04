@@ -50,6 +50,13 @@ type Company = {
   sender_name: string | null;
   sender_email: string | null;
   reply_to_email: string | null;
+  website_url: string | null;
+  company_address: string | null;
+  footer_phone: string | null;
+  footer_tagline: string | null;
+  footer_show_address: boolean;
+  footer_show_phone: boolean;
+  footer_show_website: boolean;
 };
 
 // -----------------------------------------
@@ -87,7 +94,7 @@ function cleanEmailAddress(
    * characters to their normal ASCII equivalents.
    *
    * Example:
-   * ï¼  becomes @
+   * Ã¯Â¼Â  becomes @
    */
   email = email.normalize("NFKC");
 
@@ -282,6 +289,12 @@ const paragraphs = normalizedContent
       ? `<img src="${escapeHtml(company.logo_url)}" alt="${escapeHtml(companyName)}" style="display:block;max-width:220px;max-height:90px;width:auto;height:auto;margin:0 auto;" />`
       : `<img src="${WEBSITE_URL}/AustraliaNewZealand-02.png" alt="${escapeHtml(companyName)}" width="140" style="display:block;width:140px;max-width:100%;height:auto;margin:0 auto;" />`;
 
+  const taglineHtml = company?.footer_tagline ? `<p style="margin:6px 0 0 0;">${escapeHtml(company.footer_tagline)}</p>` : "";
+  const addressHtml = company?.footer_show_address && company.company_address ? `<p style="margin:6px 0 0 0;">${escapeHtml(company.company_address)}</p>` : "";
+  const phoneHtml = company?.footer_show_phone && company.footer_phone ? `<span>${escapeHtml(company.footer_phone)}</span>` : "";
+  const websiteHtml = company?.footer_show_website && company.website_url ? `<a href="${escapeHtml(company.website_url)}" style="color:#64748b;">${escapeHtml(company.website_url)}</a>` : "";
+  const contactHtml = phoneHtml || websiteHtml ? `<p style="margin:6px 0 0 0;">${phoneHtml}${phoneHtml && websiteHtml ? " · " : ""}${websiteHtml}</p>` : "";
+
   return `
     <!DOCTYPE html>
     <html>
@@ -386,20 +399,12 @@ const paragraphs = normalizedContent
               color:#64748b;
             ">
 
-              <p>
-                You are receiving this email because you are
-                subscribed to ${escapeHtml(companyName)}
-                updates.
-              </p>
-
-              <p>
-                <a
-                  href="${unsubscribeUrl}"
-                  style="color:#64748b;"
-                >
-                  Unsubscribe
-                </a>
-              </p>
+              <p style="margin:0;font-weight:bold;color:#475569;">${escapeHtml(companyName)}</p>
+              ${taglineHtml}
+              ${addressHtml}
+              ${contactHtml}
+              <p style="margin-top:18px;">You are receiving this email because you are subscribed to ${escapeHtml(companyName)} updates.</p>
+              <p><a href="${unsubscribeUrl}" style="color:#64748b;">Unsubscribe</a></p>
 
             </div>
 
@@ -787,7 +792,7 @@ export async function POST(
     } = await supabase
       .from("companies")
       .select(
-        "id,name,slug,logo_url,primary_colour,secondary_colour,sender_name,sender_email,reply_to_email"
+        "id,name,slug,logo_url,primary_colour,secondary_colour,sender_name,sender_email,reply_to_email,website_url,company_address,footer_phone,footer_tagline,footer_show_address,footer_show_phone,footer_show_website"
       )
       .eq("id", companyId)
       .eq("active", true)

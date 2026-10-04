@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import Link from "next/link";
 
 type Company = {
   id: string;
@@ -576,6 +577,7 @@ export default function IssuesManager({
                     </div>
 
                     <div className="flex flex-wrap gap-2">
+                      <Link href={`/admin/issues/${issue.id}?company=${encodeURIComponent(currentCompany.slug)}`} className="rounded bg-slate-900 px-4 py-2 font-semibold text-white hover:bg-slate-800">Open Newsletter</Link>
 
                       <button
                         type="button"

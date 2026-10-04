@@ -6,6 +6,8 @@ type Company={
   primary_colour:string;secondary_colour:string;accent_colour:string|null;
   website_url:string|null;company_address:string|null;
   sender_name:string|null;sender_email:string|null;reply_to_email:string|null;
+  footer_phone:string|null;footer_tagline:string|null;
+  footer_show_address:boolean;footer_show_phone:boolean;footer_show_website:boolean;
 };
 
 export default function CompanySettingsManager({initialCompany}:{initialCompany:Company}){
@@ -120,6 +122,30 @@ export default function CompanySettingsManager({initialCompany}:{initialCompany:
         <div><label className="text-sm font-semibold">Sender Name</label><input value={company.sender_name??""} onChange={e=>field("sender_name",e.target.value)} className="mt-2 w-full rounded border p-3"/></div>
         <div><label className="text-sm font-semibold">Sender Email</label><input type="email" value={company.sender_email??""} onChange={e=>field("sender_email",e.target.value)} className="mt-2 w-full rounded border p-3"/></div>
         <div><label className="text-sm font-semibold">Reply-To Email</label><input type="email" value={company.reply_to_email??""} onChange={e=>field("reply_to_email",e.target.value)} className="mt-2 w-full rounded border p-3"/></div>
+      </div>
+    </section>
+
+    <section className="rounded-xl bg-white p-8 shadow">
+      <h2 className="text-2xl font-bold">Email Footer</h2>
+      <p className="mt-2 text-sm text-slate-500">Configure the company details shown at the bottom of newsletters and standalone emails. The unsubscribe link is always included by Codexus.</p>
+      <div className="mt-6 grid gap-5 md:grid-cols-2">
+        <div><label className="text-sm font-semibold">Footer Tagline</label><input value={company.footer_tagline??""} onChange={e=>field("footer_tagline",e.target.value)} className="mt-2 w-full rounded border p-3" placeholder="Passive Fire Protection Specialists"/></div>
+        <div><label className="text-sm font-semibold">Phone</label><input value={company.footer_phone??""} onChange={e=>field("footer_phone",e.target.value)} className="mt-2 w-full rounded border p-3" placeholder="0800 FIREUP"/></div>
+      </div>
+      <div className="mt-6 flex flex-wrap gap-6">
+        <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={company.footer_show_address} onChange={e=>setCompany(c=>({...c,footer_show_address:e.target.checked}))}/> Show company address</label>
+        <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={company.footer_show_phone} onChange={e=>setCompany(c=>({...c,footer_show_phone:e.target.checked}))}/> Show phone number</label>
+        <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={company.footer_show_website} onChange={e=>setCompany(c=>({...c,footer_show_website:e.target.checked}))}/> Show website</label>
+      </div>
+      <div className="mt-7 rounded-xl border bg-slate-50 p-6 text-sm text-slate-600">
+        <p className="font-bold text-slate-900">{company.name}</p>
+        {company.footer_tagline&&<p className="mt-1">{company.footer_tagline}</p>}
+        {company.footer_show_address&&company.company_address&&<p className="mt-2">{company.company_address}</p>}
+        <div className="mt-1 flex flex-wrap gap-x-3">
+          {company.footer_show_phone&&company.footer_phone&&<span>{company.footer_phone}</span>}
+          {company.footer_show_website&&company.website_url&&<span>{company.website_url}</span>}
+        </div>
+        <div className="mt-5 border-t pt-4 text-xs text-slate-500"><p>You are receiving this email because you are subscribed to {company.name} updates.</p><p className="mt-2 underline">Unsubscribe</p></div>
       </div>
     </section>
 

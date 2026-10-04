@@ -99,6 +99,9 @@ export async function POST(
             body.author ?? ""
           ).trim() || null,
 
+        author_id:
+          body.author_id || null,
+
         content:
           String(
             body.content ?? ""

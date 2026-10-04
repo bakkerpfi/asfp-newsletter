@@ -9,6 +9,8 @@ type Company = {
   primary_colour:string; secondary_colour:string; accent_colour:string|null;
   website_url:string|null; company_address:string|null;
   sender_name:string|null; sender_email:string|null; reply_to_email:string|null;
+  footer_phone:string|null; footer_tagline:string|null;
+  footer_show_address:boolean; footer_show_phone:boolean; footer_show_website:boolean;
 };
 
 export default async function CompanySettingsPage({searchParams}:Props) {
@@ -29,7 +31,7 @@ export default async function CompanySettingsPage({searchParams}:Props) {
   }
 
   const {data:rows}=await supabase.from("companies")
-    .select("id,name,slug,logo_url,primary_colour,secondary_colour,accent_colour,website_url,company_address,sender_name,sender_email,reply_to_email")
+    .select("id,name,slug,logo_url,primary_colour,secondary_colour,accent_colour,website_url,company_address,sender_name,sender_email,reply_to_email,footer_phone,footer_tagline,footer_show_address,footer_show_phone,footer_show_website")
     .in("id",companyIds).eq("active",true).order("name",{ascending:true});
   const companies=(rows??[]) as Company[];
   if(!companies.length) return <main className="p-10">No Company Access</main>;
@@ -39,7 +41,7 @@ export default async function CompanySettingsPage({searchParams}:Props) {
   return <div className="flex">
     <AdminSidebar companies={companies} currentCompany={currentCompany} platformAdmin={profile?.platform_admin??false}/>
     <main className="flex-1 bg-slate-100 p-10">
-      <h1 className="text-4xl font-bold text-slate-900">Company Settings</h1>
+      <h1 className="text-4xl font-bold" style={{color:currentCompany.primary_colour}}>Company Settings</h1>
       <p className="mt-2 text-slate-600">Manage branding and email identity for <strong>{currentCompany.name}</strong>.</p>
       <CompanySettingsManager initialCompany={currentCompany}/>
     </main>

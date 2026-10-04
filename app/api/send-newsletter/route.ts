@@ -9,11 +9,9 @@ const WEBSITE_URL =
   process.env.WEBSITE_URL ||
   "http://localhost:3000";
 
-const RESEND_BATCH_SIZE = 10;
+const RESEND_BATCH_SIZE = 100;
 const DATABASE_PAGE_SIZE = 1000;
-const BATCH_DELAY_MS = 1500;
-const MAX_BATCH_ATTEMPTS = 3;
-const RETRY_DELAY_MS = 3000;
+const BATCH_DELAY_MS = 300;
 
 type Subscriber = {
   id: number;
@@ -61,14 +59,15 @@ function createEmailHtml(
     month: string | null;
     year: number | null;
   },
-  company: {
-    name: string;
-    logo_url: string | null;
-    primary_colour: string;
-    secondary_colour: string;
-    website_url: string | null;
-    sender_name: string | null;
-  }
+company: {
+  name: string;
+  logo_url: string | null;
+  primary_colour: string;
+  secondary_colour: string;
+  website_url: string | null;
+  sender_name: string | null;
+  sender_email: string | null;
+}
 ) {
   const newsletterUrl =
     `${WEBSITE_URL}/newsletter/${issue.id}` +
@@ -323,9 +322,9 @@ export async function POST(
       error: companyError,
     } = await supabase
       .from("companies")
-      .select(
-        "id,name,slug,logo_url,primary_colour,secondary_colour,website_url,sender_name,reply_to_email"
-      )
+.select(
+  "id,name,slug,logo_url,primary_colour,secondary_colour,website_url,sender_name,sender_email,reply_to_email"
+)
       .eq("id", companyId)
       .eq("active", true)
       .maybeSingle();
@@ -368,6 +367,11 @@ export async function POST(
         { status: 403 }
       );
     }
+
+    const companyFromEmail =
+  company.sender_email
+    ? `${company.sender_name || company.name} <${company.sender_email}>`
+    : fromEmail;
 
     const replyTo =
       company.reply_to_email ||
@@ -434,7 +438,7 @@ export async function POST(
 
     /*
      * Send pending subscribers in Resend
-     * conservative batches of no more than 10.
+     * batches of no more than 100.
      */
     for (
       let index = 0;
@@ -449,7 +453,7 @@ export async function POST(
 
       const emails = subscriberBatch.map(
         (subscriber) => ({
-          from: fromEmail,
+          from: companyFromEmail,
           replyTo,
           to: subscriber.email,
           subject:
@@ -468,38 +472,20 @@ export async function POST(
           index / RESEND_BATCH_SIZE
         ) + 1;
 
-      let data: any = null;
-      let resendError: any = null;
-
-      for (
-        let attempt = 1;
-        attempt <= MAX_BATCH_ATTEMPTS;
-        attempt++
-      ) {
-        const result =
-          await resend.batch.send(emails);
-
-        data = result.data;
-        resendError = result.error;
-
-        if (!resendError) {
-          break;
-        }
-
-        console.error(
-          `BATCH ${batchNumber} ATTEMPT ${attempt} FAILED:`,
-          resendError
-        );
-
-        if (attempt < MAX_BATCH_ATTEMPTS) {
-          await delay(RETRY_DELAY_MS);
-        }
-      }
+      const {
+        data,
+        error: resendError,
+      } = await resend.batch.send(emails);
 
       if (resendError) {
         const reason =
           resendError.message ||
           "Unknown batch sending error.";
+
+        console.error(
+          `BATCH ${batchNumber} FAILED:`,
+          resendError
+        );
 
         failed.push({
           emails: subscriberBatch.map(
@@ -509,13 +495,8 @@ export async function POST(
           reason,
         });
 
-        /*
-         * Stop after an exhausted batch rather than
-         * racing ahead into later recipients.
-         * A subsequent Resume safely skips recipients
-         * already recorded as sent.
-         */
-        break;
+        await delay(BATCH_DELAY_MS);
+        continue;
       }
 
       const resendResults =

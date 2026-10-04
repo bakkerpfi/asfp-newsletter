@@ -144,28 +144,10 @@ const sidebarColour = "#111318";
         </Link>
 
         <Link
-          href={companyHref(
-            "/admin/articles"
-          )}
+          href={companyHref("/admin/articles")}
           className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-white/10"
         >
-          Articles
-        </Link>
-
-        <Link
-          href={companyHref("/admin/polls")}
-          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-white/10"
-        >
-          Polls
-        </Link>
-
-        <Link
-          href={companyHref(
-            "/admin/subscribers"
-          )}
-          className="block rounded-lg px-4 py-3 font-semibold transition hover:bg-white/10"
-        >
-          Subscribers
+          Newsletter Builder
         </Link>
 
         <Link

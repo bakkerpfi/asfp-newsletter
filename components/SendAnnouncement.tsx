@@ -9,6 +9,13 @@ type Props = {
   logoUrl: string | null;
   primaryColour: string;
   secondaryColour: string;
+  websiteUrl: string | null;
+  companyAddress: string | null;
+  footerPhone: string | null;
+  footerTagline: string | null;
+  footerShowAddress: boolean;
+  footerShowPhone: boolean;
+  footerShowWebsite: boolean;
 };
 
 type FailedBatch = {
@@ -85,6 +92,13 @@ export default function SendAnnouncement({
   logoUrl,
   primaryColour,
   secondaryColour,
+  websiteUrl,
+  companyAddress,
+  footerPhone,
+  footerTagline,
+  footerShowAddress,
+  footerShowPhone,
+  footerShowWebsite,
 }: Props) {
   const [subject, setSubject] = useState("");
 
@@ -751,15 +765,12 @@ export default function SendAnnouncement({
               </div>
 
               <div className="border-t bg-slate-50 px-8 py-6 text-xs leading-5 text-slate-500">
-
-                <p>
-                  You are receiving this email because you are subscribed to {companyName} updates.
-                </p>
-
-                <p className="mt-3 underline">
-                  Unsubscribe
-                </p>
-
+                <p className="font-bold text-slate-700">{companyName}</p>
+                {footerTagline && <p className="mt-1">{footerTagline}</p>}
+                {footerShowAddress && companyAddress && <p className="mt-2">{companyAddress}</p>}
+                {(footerShowPhone && footerPhone) || (footerShowWebsite && websiteUrl) ? <p className="mt-1">{footerShowPhone && footerPhone ? footerPhone : ""}{footerShowPhone && footerPhone && footerShowWebsite && websiteUrl ? " · " : ""}{footerShowWebsite && websiteUrl ? websiteUrl : ""}</p> : null}
+                <p className="mt-4">You are receiving this email because you are subscribed to {companyName} updates.</p>
+                <p className="mt-3 underline">Unsubscribe</p>
               </div>
 
             </div>

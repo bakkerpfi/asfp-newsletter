@@ -75,7 +75,12 @@ export default async function NewsletterPage({
       company_address,
       sender_name,
       sender_email,
-      reply_to_email
+      reply_to_email,
+      footer_phone,
+      footer_tagline,
+      footer_show_address,
+      footer_show_phone,
+      footer_show_website
       `
     )
     .eq("id", companyId)
@@ -139,6 +144,45 @@ export default async function NewsletterPage({
   const safePolls =
     polls ?? [];
 
+
+  const authorIds = safeArticles
+    .map((article) => article.author_id)
+    .filter(Boolean);
+
+  const { data: authorRows } = authorIds.length > 0
+    ? await supabase
+        .from("article_authors")
+        .select("id,name,job_title,photo_url")
+        .eq("company_id", companyId)
+        .in("id", authorIds)
+    : { data: [] as any[] };
+
+  const authorsById = new Map(
+    (authorRows ?? []).map((profile: any) => [
+      String(profile.id),
+      profile,
+    ])
+  );
+
+  const articleIds = safeArticles.map((article) => article.id);
+
+  const { data: blockRows } = articleIds.length > 0
+    ? await supabase
+        .from("article_blocks")
+        .select("*")
+        .eq("company_id", companyId)
+        .in("article_id", articleIds)
+        .order("sort_order", { ascending: true })
+    : { data: [] as any[] };
+
+  const blocksByArticle = new Map<number, any[]>();
+
+  for (const block of blockRows ?? []) {
+    const current = blocksByArticle.get(block.article_id) ?? [];
+    current.push(block);
+    blocksByArticle.set(block.article_id, current);
+  }
+
   // =====================================================
   // SUBSCRIBER PERSONALISATION
   //
@@ -199,6 +243,28 @@ export default async function NewsletterPage({
     isAsfp
       ? "Thank you for your continued support of ASFP Australia & New Zealand. We hope you enjoy this edition of our Industry Update."
       : `Thank you for your continued interest in ${companyName}. We hope you enjoy this edition of our newsletter.`;
+
+  const showFooterAddress =
+    company.footer_show_address !== false &&
+    Boolean(company.company_address);
+
+  const showFooterPhone =
+    company.footer_show_phone !== false &&
+    Boolean(company.footer_phone);
+
+  const showFooterWebsite =
+    company.footer_show_website !== false &&
+    Boolean(company.website_url);
+
+  const footerContact =
+    [
+      showFooterPhone
+        ? company.footer_phone
+        : null,
+      showFooterWebsite
+        ? company.website_url
+        : null,
+    ].filter(Boolean);
 
   // =====================================================
   // UI
@@ -432,108 +498,102 @@ export default async function NewsletterPage({
                   {article.title}
                 </h2>
 
-                <div className="mt-6 text-lg leading-8 text-slate-700">
-
-                  {String(
-                    article.content ??
-                      ""
-                  )
-                    .split("\n\n")
-                    .map(
-                      (
-                        paragraph:
-                          string,
-                        index:
-                          number
-                      ) => (
-
-                        <p
-                          key={index}
-                          className="mb-6"
-                        >
-
-                          {paragraph
-                            .split(
-                              /(\s+)/
-                            )
-                            .map(
-                              (
-                                part:
-                                  string,
-                                partIndex:
-                                  number
-                              ) => {
-                                const cleanPart =
-                                  part.replace(
-                                    /[().,]+$/g,
-                                    ""
-                                  );
-
-                                const isLink =
-                                  cleanPart.startsWith(
-                                    "www."
-                                  ) ||
-                                  cleanPart.startsWith(
-                                    "http://"
-                                  ) ||
-                                  cleanPart.startsWith(
-                                    "https://"
-                                  );
-
-                                if (
-                                  !isLink
-                                ) {
-                                  return part;
-                                }
-
-                                const url =
-                                  cleanPart.startsWith(
-                                    "www."
-                                  )
-                                    ? `https://${cleanPart}`
-                                    : cleanPart;
-
-                                const trailing =
-                                  part.replace(
-                                    cleanPart,
-                                    ""
-                                  );
-
-                                return (
-                                  <span
-                                    key={
-                                      partIndex
-                                    }
-                                  >
-                                    <a
-                                      href={
-                                        url
-                                      }
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-blue-600 underline"
-                                    >
-                                      {
-                                        cleanPart
-                                      }
-                                    </a>
-
-                                    {
-                                      trailing
-                                    }
-                                  </span>
-                                );
-                              }
-                            )}
-
+                {article.author_id && authorsById.get(String(article.author_id)) && (() => {
+                  const profile = authorsById.get(String(article.author_id));
+                  return (
+                    <div className="mt-5 flex items-center gap-4">
+                      {profile.photo_url && (
+                        <img
+                          src={profile.photo_url}
+                          alt={profile.name}
+                          className="h-16 w-16 rounded-full object-cover"
+                        />
+                      )}
+                      <div>
+                        <p className="font-semibold" style={{ color: primaryColour }}>
+                          {profile.name}
                         </p>
+                        {profile.job_title && (
+                          <p className="text-sm text-slate-500">{profile.job_title}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
-                      )
-                    )}
+                <div className="mt-6 text-lg leading-8 text-slate-700">
+                  {(blocksByArticle.get(article.id) ?? []).length > 0 ? (
+                    (blocksByArticle.get(article.id) ?? []).map((block: any) => {
+                      if (block.block_type === "text") {
+                        return (
+                          <div key={block.id}>
+                            {String(block.content ?? "")
+                              .split("\n\n")
+                              .map((paragraph: string, index: number) => (
+                                <p key={index} className="mb-6 whitespace-pre-line">
+                                  {paragraph}
+                                </p>
+                              ))}
+                          </div>
+                        );
+                      }
 
+                      if (block.block_type === "image" && block.image_url) {
+                        const widthClass =
+                          block.image_size === "small" ? "max-w-xs" :
+                          block.image_size === "medium" ? "max-w-md" :
+                          block.image_size === "large" ? "max-w-2xl" : "w-full";
+
+                        const alignClass =
+                          block.image_alignment === "left" ? "mr-auto" :
+                          block.image_alignment === "right" ? "ml-auto" : "mx-auto";
+
+                        const captionAlign =
+                          block.image_alignment === "left" ? "text-left" :
+                          block.image_alignment === "right" ? "text-right" : "text-center";
+
+                        return (
+                          <figure key={block.id} className="my-8">
+                            <img
+                              src={block.image_url}
+                              alt={block.caption || article.title}
+                              className={`${widthClass} ${alignClass} h-auto rounded-lg`}
+                            />
+                            {block.caption && (
+                              <figcaption className={`mt-2 text-sm text-slate-500 ${captionAlign}`}>
+                                {block.caption}
+                              </figcaption>
+                            )}
+                          </figure>
+                        );
+                      }
+
+                      if (block.block_type === "quote" && block.content) {
+                        return (
+                          <blockquote
+                            key={block.id}
+                            className="my-8 rounded-r-lg border-l-4 bg-slate-50 px-6 py-5 text-xl font-medium italic leading-8 text-slate-700"
+                            style={{ borderColor: secondaryColour }}
+                          >
+                            {block.content}
+                          </blockquote>
+                        );
+                      }
+
+                      return null;
+                    })
+                  ) : (
+                    String(article.content ?? "")
+                      .split("\n\n")
+                      .map((paragraph: string, index: number) => (
+                        <p key={index} className="mb-6 whitespace-pre-line">
+                          {paragraph}
+                        </p>
+                      ))
+                  )}
                 </div>
 
-                {article.author && (
+                {article.author && !article.author_id && (
 
                   <div className="mt-8 border-t pt-4 text-sm text-slate-500">
                     Author:{" "}
@@ -687,51 +747,45 @@ export default async function NewsletterPage({
 
               <h4
                 className="font-semibold"
-                style={{
-                  color:
-                    primaryColour,
-                }}
+                style={{ color: primaryColour }}
               >
                 {companyName}
               </h4>
 
-              {company.company_address && (
-
+              {company.footer_tagline && (
                 <p className="mt-2 text-sm text-slate-500">
-                  {
-                    company.company_address
-                  }
+                  {company.footer_tagline}
                 </p>
-
               )}
 
-              {company.website_url && (
+              {showFooterAddress && (
+                <p className="mt-2 text-sm text-slate-500">
+                  {company.company_address}
+                </p>
+              )}
 
+              {footerContact.length > 0 && (
+                <p className="mt-2 text-sm text-slate-500">
+                  {footerContact.join(" · ")}
+                </p>
+              )}
+
+              {showFooterWebsite && (
                 <p className="mt-3">
-
                   <a
-                    href={
-                      company.website_url
-                    }
+                    href={company.website_url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm font-semibold underline"
-                    style={{
-                      color:
-                        accentColour,
-                    }}
+                    style={{ color: accentColour }}
                   >
                     Visit our website
                   </a>
-
                 </p>
-
               )}
 
               <p className="mt-6 text-xs text-slate-400">
-                ©{" "}
-                {new Date().getFullYear()}{" "}
-                {companyName}
+                © {new Date().getFullYear()} {companyName}
               </p>
 
             </div>
@@ -778,46 +832,46 @@ export default async function NewsletterPage({
           )}
 
           <h4
-            className={`font-semibold ${
-              subscriber
-                ? "mt-8"
-                : ""
-            }`}
-            style={{
-              color:
-                primaryColour,
-            }}
+            className={`font-semibold ${subscriber ? "mt-8" : ""}`}
+            style={{ color: primaryColour }}
           >
             {companyName}
           </h4>
 
-          {company.website_url && (
+          {company.footer_tagline && (
+            <p className="mt-2 text-sm text-slate-500">
+              {company.footer_tagline}
+            </p>
+          )}
 
+          {showFooterAddress && (
+            <p className="mt-2 text-sm text-slate-500">
+              {company.company_address}
+            </p>
+          )}
+
+          {footerContact.length > 0 && (
+            <p className="mt-2 text-sm text-slate-500">
+              {footerContact.join(" · ")}
+            </p>
+          )}
+
+          {showFooterWebsite && (
             <p className="mt-3">
-
               <a
-                href={
-                  company.website_url
-                }
+                href={company.website_url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm font-semibold underline"
-                style={{
-                  color:
-                    accentColour,
-                }}
+                style={{ color: accentColour }}
               >
                 Visit our website
               </a>
-
             </p>
-
           )}
 
           <p className="mt-6 text-xs text-slate-400">
-            ©{" "}
-            {new Date().getFullYear()}{" "}
-            {companyName}
+            © {new Date().getFullYear()} {companyName}
           </p>
 
         </div>

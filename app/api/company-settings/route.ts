@@ -120,6 +120,16 @@ export async function PATCH(
           clean(body.sender_email),
         reply_to_email:
           clean(body.reply_to_email),
+        footer_phone:
+          clean(body.footer_phone),
+        footer_tagline:
+          clean(body.footer_tagline),
+        footer_show_address:
+          body.footer_show_address !== false,
+        footer_show_phone:
+          body.footer_show_phone !== false,
+        footer_show_website:
+          body.footer_show_website !== false,
         updated_at:
           new Date().toISOString(),
       })
@@ -128,7 +138,7 @@ export async function PATCH(
         tenant.company.id
       )
       .select(
-        "id,name,slug,logo_url,primary_colour,secondary_colour,accent_colour,website_url,company_address,sender_name,sender_email,reply_to_email"
+        "id,name,slug,logo_url,primary_colour,secondary_colour,accent_colour,website_url,company_address,sender_name,sender_email,reply_to_email,footer_phone,footer_tagline,footer_show_address,footer_show_phone,footer_show_website"
       )
       .single();
 

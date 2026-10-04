@@ -1,150 +1,66 @@
-import AdminSidebar from "@/components/AdminSidebar";
-import ArticlesManager from "@/components/ArticlesManager";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 
-type ArticlesPageProps = {
-  searchParams: Promise<{
-    company?: string;
-  }>;
+type Props = {
+  searchParams: Promise<{ company?: string }>;
 };
 
-type Company = {
-  id: string;
-  name: string;
-  slug: string;
-  logo_url: string | null;
-  primary_colour: string;
-  secondary_colour: string;
-};
-
-export default async function ArticlesPage({
-  searchParams,
-}: ArticlesPageProps) {
+export default async function NewsletterBuilderEntry({ searchParams }: Props) {
   const params = await searchParams;
+  const supabase = await createSupabaseServerClient();
 
-  const supabase =
-    await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("platform_admin")
+    .eq("id", user.id)
+    .single();
 
-  if (!user) {
-    redirect("/login");
+  const { data: memberships } = await supabase
+    .from("company_users")
+    .select("company_id")
+    .eq("user_id", user.id);
+
+  let companyIds = memberships?.map((m) => m.company_id) ?? [];
+
+  if (profile?.platform_admin) {
+    const { data: allCompanies } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("active", true);
+    companyIds = allCompanies?.map((c) => c.id) ?? [];
   }
 
-  const { data: profile } =
-    await supabase
-      .from("profiles")
-      .select(
-        "id,full_name,platform_admin"
-      )
-      .eq("id", user.id)
-      .single();
+  const { data: companies } = await supabase
+    .from("companies")
+    .select("id,slug")
+    .in("id", companyIds)
+    .eq("active", true)
+    .order("name");
 
-  const { data: memberships } =
-    await supabase
-      .from("company_users")
-      .select(
-        "company_id,role"
-      )
-      .eq("user_id", user.id);
+  if (!companies?.length) redirect("/admin");
 
-  const companyIds =
-    memberships?.map(
-      (membership) =>
-        membership.company_id
-    ) ?? [];
+  const company =
+    (params.company
+      ? companies.find((c) => c.slug === params.company)
+      : null) ?? companies[0];
 
-  let companies: Company[] = [];
+  const { data: issue } = await supabase
+    .from("issues")
+    .select("id")
+    .eq("company_id", company.id)
+    .order("year", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  if (companyIds.length > 0) {
-    const { data } =
-      await supabase
-        .from("companies")
-        .select(
-          "id,name,slug,logo_url,primary_colour,secondary_colour"
-        )
-        .in("id", companyIds)
-        .eq("active", true)
-        .order("name", {
-          ascending: true,
-        });
-
-    companies =
-      (data ?? []) as Company[];
+  if (!issue) {
+    redirect(`/admin/issues?company=${encodeURIComponent(company.slug)}`);
   }
 
-  if (companies.length === 0) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100 p-8">
-
-        <div className="max-w-lg rounded-xl bg-white p-10 text-center shadow">
-
-          <h1 className="text-2xl font-bold">
-            No Company Access
-          </h1>
-
-          <p className="mt-4 text-slate-600">
-            Your account has not been
-            assigned to an organisation.
-          </p>
-
-        </div>
-
-      </main>
-    );
-  }
-
-  const requestedCompany =
-    params.company
-      ? companies.find(
-          (company) =>
-            company.slug ===
-            params.company
-        )
-      : null;
-
-  const currentCompany =
-    requestedCompany ??
-    companies[0];
-
-  return (
-    <div className="flex">
-
-      <AdminSidebar
-        companies={companies}
-        currentCompany={currentCompany}
-        platformAdmin={
-          profile?.platform_admin ??
-          false
-        }
-      />
-
-      <main className="flex-1 bg-slate-100 p-10">
-
-        <h1 className="text-4xl font-bold text-slate-900">
-          Articles
-        </h1>
-
-        <p className="mt-2 text-slate-600">
-          Create and manage newsletter
-          articles for{" "}
-          <strong>
-            {currentCompany.name}
-          </strong>
-          .
-        </p>
-
-        <ArticlesManager
-          currentCompany={
-            currentCompany
-          }
-        />
-
-      </main>
-
-    </div>
+  redirect(
+    `/admin/issues/${issue.id}?company=${encodeURIComponent(company.slug)}`
   );
 }

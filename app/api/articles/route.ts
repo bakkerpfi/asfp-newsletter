@@ -59,9 +59,9 @@ export async function GET(
         "company_id",
         tenant.company.id
       )
-      .order("id", {
-        ascending: false,
-      });
+.order("id", {
+  ascending: true,
+});
 
     if (error) {
       throw error;
@@ -196,6 +196,9 @@ export async function POST(
           String(
             body.author ?? ""
           ).trim() || null,
+
+        author_id:
+          body.author_id || null,
 
         content:
           String(

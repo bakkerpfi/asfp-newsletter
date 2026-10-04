@@ -14,6 +14,13 @@ type Company = {
   logo_url: string | null;
   primary_colour: string;
   secondary_colour: string;
+  website_url: string | null;
+  company_address: string | null;
+  footer_phone: string | null;
+  footer_tagline: string | null;
+  footer_show_address: boolean;
+  footer_show_phone: boolean;
+  footer_show_website: boolean;
 };
 
 export default async function CreateEmailPage({
@@ -68,7 +75,7 @@ export default async function CreateEmailPage({
     await supabase
       .from("companies")
       .select(
-        "id,name,slug,logo_url,primary_colour,secondary_colour"
+        "id,name,slug,logo_url,primary_colour,secondary_colour,website_url,company_address,footer_phone,footer_tagline,footer_show_address,footer_show_phone,footer_show_website"
       )
       .in("id", companyIds)
       .eq("active", true)
@@ -169,6 +176,13 @@ export default async function CreateEmailPage({
           secondaryColour={
             currentCompany.secondary_colour
           }
+          websiteUrl={currentCompany.website_url}
+          companyAddress={currentCompany.company_address}
+          footerPhone={currentCompany.footer_phone}
+          footerTagline={currentCompany.footer_tagline}
+          footerShowAddress={currentCompany.footer_show_address}
+          footerShowPhone={currentCompany.footer_show_phone}
+          footerShowWebsite={currentCompany.footer_show_website}
         />
       </main>
     </div>
