@@ -5,10 +5,6 @@ import Image from "next/image";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
 export default function LoginPage() {
-    console.log(
-    "CODEXUS SUPABASE PROJECT:",
-    process.env.NEXT_PUBLIC_SUPABASE_URL
-  );
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
