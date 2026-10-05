@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
 export default function LoginPage() {
@@ -22,10 +23,11 @@ export default function LoginPage() {
       const { error } =
         await supabaseBrowser.auth.signInWithOtp({
           email: cleanEmail,
-          options: {
-            emailRedirectTo:
-              `${window.location.origin}/auth/callback`,
-          },
+options: {
+  shouldCreateUser: false,
+  emailRedirectTo:
+    `${window.location.origin}/auth/callback`,
+},
         });
 
       if (error) {
@@ -55,13 +57,16 @@ export default function LoginPage() {
 
         <div className="bg-slate-950 p-10 text-center text-white">
 
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-white/10">
-
-            <span className="text-4xl font-bold">
-              C
-            </span>
-
-          </div>
+<div className="mx-auto flex items-center justify-center">
+  <Image
+    src="/Codexus-logo.png"
+    alt="Codexus"
+    width={110}
+    height={110}
+    priority
+    className="h-auto w-28 object-contain"
+  />
+</div>
 
           <h1 className="mt-6 text-4xl font-bold">
             Codexus Newsletter
