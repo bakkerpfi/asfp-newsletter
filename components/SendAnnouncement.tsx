@@ -4,11 +4,36 @@ import { useEffect, useState } from "react";
 
 type Props = {
   subscriberCount: number;
+  companySlug: string;
+  companyName: string;
+  logoUrl: string | null;
+  primaryColour: string;
+  secondaryColour: string;
+  websiteUrl: string | null;
+  companyAddress: string | null;
+  footerPhone: string | null;
+  footerTagline: string | null;
+  footerShowAddress: boolean;
+  footerShowPhone: boolean;
+  footerShowWebsite: boolean;
 };
 
 type FailedBatch = {
   emails: string[];
   reason: string;
+};
+
+type AudiencePreview = {
+  company: {
+    name: string;
+    slug: string;
+  };
+  active: number;
+  recipients: {
+    id: number;
+    name: string | null;
+    email: string;
+  }[];
 };
 
 type CampaignResult = {
@@ -62,36 +87,28 @@ function getFailureSummary(
 
 export default function SendAnnouncement({
   subscriberCount,
+  companySlug,
+  companyName,
+  logoUrl,
+  primaryColour,
+  secondaryColour,
+  websiteUrl,
+  companyAddress,
+  footerPhone,
+  footerTagline,
+  footerShowAddress,
+  footerShowPhone,
+  footerShowWebsite,
 }: Props) {
-  const [subject, setSubject] = useState(
-    "ASFP ANZ – Raising the Bar"
-  );
+  const [subject, setSubject] = useState("");
 
-  const [heading, setHeading] = useState(
-    "ASFP ANZ – Raising the Bar"
-  );
+  const [heading, setHeading] = useState("");
 
-  const [content, setContent] = useState(
-`The passive fire protection world has moved on a lot since the Grenfell Tower disaster in 2017, many lessons have been learnt, many parts of the world have had major changes in their approach to passive fire protection, with the delivery of new guidance, training, qualifications and competency.
+  const [content, setContent] = useState("");
 
-New Zealand has found it hard keeping up, maybe through a lack of resource or the lack of a passive fire protection trade association to drive forward new initiatives.
+  const [buttonText, setButtonText] = useState("");
 
-ASFP ANZ has been established to address this and even though our branch is only six months old, we start delivering this week with the launch of our new publicly accessible technical hub at www.asfp.co.nz.
-
-The new hub contains technical guidance, advisory notes, position statements, best practice guides, passive inspection guides and much more.
-
-If your involvement with passive fire protection is firestopping, fire doors, structural fire protection, fire & smoke curtains, fire resistant ducting, fire dampers, building envelopes, floors, walls and ceilings, and you’re either a manufacture, designer, installer, inspector or occupier, we believe you will find the information held within the hub interesting.
-
-This is the first of many initiatives that ASFP ANZ will deliver, we have much more planned and will announce the next initiative very shortly.`
-  );
-
-  const [buttonText, setButtonText] = useState(
-    "Visit the ASFP ANZ Technical Hub"
-  );
-
-  const [buttonLink, setButtonLink] = useState(
-    "https://www.asfp.co.nz/"
-  );
+  const [buttonLink, setButtonLink] = useState("");
 
   const [proofEmail, setProofEmail] = useState("");
 
@@ -110,6 +127,12 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
   const [checkingCampaign, setCheckingCampaign] =
     useState(true);
 
+  const [audiencePreview, setAudiencePreview] =
+    useState<AudiencePreview | null>(null);
+
+  const [previewingAudience, setPreviewingAudience] =
+    useState(false);
+
   // -----------------------------------------
   // CHECK FOR INCOMPLETE CAMPAIGN
   // -----------------------------------------
@@ -118,7 +141,7 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
     async function checkForIncompleteCampaign() {
       try {
         const response = await fetch(
-          "/api/announcement-campaign/status",
+          `/api/announcement-campaign/status?company=${encodeURIComponent(companySlug)}`,
           {
             method: "GET",
             cache: "no-store",
@@ -140,6 +163,18 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
         }
 
         const campaign = result.campaign;
+
+        const remaining =
+          Number(campaign.remaining) || 0;
+
+        if (
+          campaign.status === "completed" ||
+          remaining === 0
+        ) {
+          setCampaignId(null);
+          setCampaignResult(null);
+          return;
+        }
 
         setCampaignId(Number(campaign.id));
 
@@ -176,7 +211,7 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
     }
 
     checkForIncompleteCampaign();
-  }, []);
+  }, [companySlug]);
 
   // -----------------------------------------
   // SEND PROOF
@@ -202,6 +237,7 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
               "application/json",
           },
           body: JSON.stringify({
+            companySlug,
             subject,
             heading,
             content,
@@ -243,6 +279,53 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
   }
 
   // -----------------------------------------
+  // PREVIEW TENANT-SAFE AUDIENCE
+  // -----------------------------------------
+
+  async function previewAudience() {
+    setPreviewingAudience(true);
+    setAudiencePreview(null);
+
+    try {
+      const response = await fetch(
+        "/api/announcement-campaign/preview",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            companySlug,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        alert(
+          result.error ||
+            "Unable to preview announcement audience."
+        );
+        return;
+      }
+
+      setAudiencePreview({
+        company: result.company,
+        active: Number(result.active) || 0,
+        recipients: result.recipients ?? [],
+      });
+    } catch (error) {
+      console.error(error);
+      alert(
+        "Unable to preview announcement audience."
+      );
+    } finally {
+      setPreviewingAudience(false);
+    }
+  }
+
+  // -----------------------------------------
   // SEND / RESUME CAMPAIGN
   // -----------------------------------------
 
@@ -250,10 +333,17 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
     const isResume =
       campaignId !== null;
 
+    if (!isResume && !audiencePreview) {
+      alert(
+        "Preview the campaign audience before sending."
+      );
+      return;
+    }
+
     const confirmed = confirm(
       isResume
         ? `Resume campaign #${campaignId}?\n\nOnly subscribers not already recorded as sent will be processed.`
-        : `Are you sure you want to email this announcement to ALL ${subscriberCount} active subscribers?\n\nThis cannot be undone.`
+        : `Are you sure you want to email this announcement to ALL ${subscriberCount} active ${companyName} subscribers?\n\nThis cannot be undone.`
     );
 
     if (!confirmed) {
@@ -263,7 +353,7 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
     if (!isResume) {
       const secondConfirmation =
         confirm(
-          `FINAL CONFIRMATION\n\nSend "${subject}" to ${subscriberCount} active subscribers now?`
+          `FINAL CONFIRMATION\n\nSend "${subject}" to ${subscriberCount} active ${companyName} subscribers now?`
         );
 
       if (!secondConfirmation) {
@@ -283,6 +373,7 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
               "application/json",
           },
           body: JSON.stringify({
+            companySlug,
             subject,
             heading,
             content,
@@ -416,7 +507,7 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
             </h2>
 
             <p className="mt-2 text-slate-700">
-              Create a standalone ASFP email announcement.
+              Create a standalone email announcement for {companyName}.
             </p>
           </div>
 
@@ -582,25 +673,33 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
             <div className="mx-auto max-w-[700px] overflow-hidden rounded-lg bg-white shadow">
 
               <div
-                className="border-b-4 border-[#F52B3A] px-8 py-5 text-center"
+                className="border-b-4 px-8 py-5 text-center"
                 style={{
                   backgroundColor:
-                    "#1E2D5A",
+                    primaryColour,
+                  borderBottomColor:
+                    secondaryColour,
                 }}
               >
 
-                <img
-                  src="/AustraliaNewZealand-02.png"
-                  alt="ASFP Australia & New Zealand"
-                  style={{
-                    display:
-                      "block",
-                    width: "140px",
-                    maxWidth: "100%",
-                    height: "auto",
-                    margin: "0 auto",
-                  }}
-                />
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt={companyName}
+                    style={{
+                      display: "block",
+                      maxWidth: "220px",
+                      maxHeight: "90px",
+                      width: "auto",
+                      height: "auto",
+                      margin: "0 auto",
+                    }}
+                  />
+                ) : (
+                  <div className="text-2xl font-bold text-white">
+                    {companyName}
+                  </div>
+                )}
 
               </div>
 
@@ -611,7 +710,10 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
                 </p>
 
                 {heading && (
-                  <h1 className="mb-6 text-3xl font-bold leading-tight text-[#1E2D5A]">
+                  <h1 className="mb-6 text-3xl font-bold leading-tight"
+                    style={{
+                      color: primaryColour,
+                    }}>
                     {heading}
                   </h1>
                 )}
@@ -648,7 +750,11 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
                         href={buttonLink}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-block rounded-md bg-[#F52B3A] px-6 py-4 font-bold text-white no-underline"
+                        className="inline-block rounded-md px-6 py-4 font-bold text-white no-underline"
+                        style={{
+                          backgroundColor:
+                            secondaryColour,
+                        }}
                       >
                         {buttonText}
                       </a>
@@ -659,15 +765,12 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
               </div>
 
               <div className="border-t bg-slate-50 px-8 py-6 text-xs leading-5 text-slate-500">
-
-                <p>
-                  You are receiving this email because you are subscribed to ASFP Australia & New Zealand industry updates.
-                </p>
-
-                <p className="mt-3 underline">
-                  Unsubscribe
-                </p>
-
+                <p className="font-bold text-slate-700">{companyName}</p>
+                {footerTagline && <p className="mt-1">{footerTagline}</p>}
+                {footerShowAddress && companyAddress && <p className="mt-2">{companyAddress}</p>}
+                {(footerShowPhone && footerPhone) || (footerShowWebsite && websiteUrl) ? <p className="mt-1">{footerShowPhone && footerPhone ? footerPhone : ""}{footerShowPhone && footerPhone && footerShowWebsite && websiteUrl ? " · " : ""}{footerShowWebsite && websiteUrl ? websiteUrl : ""}</p> : null}
+                <p className="mt-4">You are receiving this email because you are subscribed to {companyName} updates.</p>
+                <p className="mt-3 underline">Unsubscribe</p>
               </div>
 
             </div>
@@ -872,6 +975,63 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
         </div>
       )}
 
+      {/* AUDIENCE PREVIEW */}
+
+      <div className="mt-8 rounded-xl border border-blue-200 bg-blue-50 p-6">
+        <h3 className="text-xl font-bold text-slate-900">
+          Announcement Audience
+        </h3>
+
+        <p className="mt-2 text-sm text-slate-600">
+          Verify the exact {companyName} recipients before enabling a new bulk send.
+        </p>
+
+        <button
+          type="button"
+          onClick={previewAudience}
+          disabled={
+            checkingCampaign ||
+            previewingAudience ||
+            sendingProof ||
+            sendingAll ||
+            campaignId !== null
+          }
+          className="mt-4 rounded bg-blue-700 px-6 py-3 font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {previewingAudience
+            ? "Checking Audience..."
+            : "Preview Campaign Audience"}
+        </button>
+
+        {audiencePreview && (
+          <div className="mt-5 rounded-lg border border-blue-200 bg-white p-5">
+            <p className="font-bold text-slate-900">
+              {audiencePreview.company.name}
+            </p>
+
+            <p className="mt-1 text-sm text-slate-600">
+              Active recipients: {audiencePreview.active}
+            </p>
+
+            <div className="mt-4 max-h-64 overflow-y-auto rounded border">
+              {audiencePreview.recipients.map((recipient) => (
+                <div
+                  key={recipient.id}
+                  className="border-b px-4 py-3 last:border-b-0"
+                >
+                  <span className="font-semibold">
+                    {recipient.name || "Unnamed subscriber"}
+                  </span>{" "}
+                  <span className="text-sm text-slate-500">
+                    {recipient.email}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* SEND / RESUME */}
 
       <div className="mt-8 rounded-xl border border-red-200 bg-red-50 p-6">
@@ -896,7 +1056,7 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
             <p className="mt-2 text-slate-700">
               This will send the announcement to all{" "}
               <strong>
-                {subscriberCount} active subscribers
+                {subscriberCount} active {companyName} subscribers
               </strong>.
             </p>
 
@@ -913,7 +1073,8 @@ This is the first of many initiatives that ASFP ANZ will deliver, we have much m
             checkingCampaign ||
             sendingProof ||
             sendingAll ||
-            campaignResult?.complete === true
+            campaignResult?.complete === true ||
+            (campaignId === null && !audiencePreview)
           }
           className="mt-5 rounded bg-red-600 px-6 py-3 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
         >

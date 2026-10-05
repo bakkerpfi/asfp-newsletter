@@ -1,19 +1,53 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { requireCompanyAccess } from "@/lib/tenant-auth";
 
 const DATABASE_PAGE_SIZE = 1000;
 
-export async function POST(request: Request) {
+function cleanEmailAddress(
+  value: unknown
+) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(
+      /[\u0000-\u001F\u007F-\u009F\u00A0\u200B-\u200D\u2060\uFEFF]/g,
+      ""
+    )
+    .replace(/\s+/g, "")
+    .replace(/[.,;:]+$/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+export async function POST(
+  request: NextRequest
+) {
   try {
-    const body = await request.json();
+    const body =
+      await request.json();
+
+    const companySlug =
+      String(
+        body.companySlug ?? ""
+      ).trim();
+
+    const tenant =
+      await requireCompanyAccess(
+        companySlug
+      );
+
+    const companyId =
+      tenant.company.id;
 
     const uploadedSubscribers =
-      Array.isArray(body.subscribers)
+      Array.isArray(
+        body.subscribers
+      )
         ? body.subscribers
         : [];
 
     // -----------------------------------------
-    // LOAD ALL EXISTING SUBSCRIBER EMAILS
+    // LOAD EXISTING EMAILS FOR THIS COMPANY ONLY
     // -----------------------------------------
 
     const {
@@ -24,7 +58,11 @@ export async function POST(request: Request) {
       .select("*", {
         count: "exact",
         head: true,
-      });
+      })
+      .eq(
+        "company_id",
+        companyId
+      );
 
     if (countError) {
       throw countError;
@@ -44,6 +82,10 @@ export async function POST(request: Request) {
       } = await supabase
         .from("subscribers")
         .select("email")
+        .eq(
+          "company_id",
+          companyId
+        )
         .order("id", {
           ascending: true,
         })
@@ -58,29 +100,39 @@ export async function POST(request: Request) {
         throw error;
       }
 
-      for (const subscriber of data ?? []) {
+      for (
+        const subscriber of
+          data ?? []
+      ) {
         const email =
-          String(
-            subscriber.email ?? ""
-          )
-            .trim()
-            .toLowerCase();
+          cleanEmailAddress(
+            subscriber.email
+          );
 
         if (email) {
-          existingEmails.add(email);
+          existingEmails.add(
+            email
+          );
         }
       }
     }
 
     // -----------------------------------------
-    // PROCESS UPLOADED SPREADSHEET
+    // PROCESS SPREADSHEET
     // -----------------------------------------
 
     const spreadsheetEmails =
       new Set<string>();
 
-    const subscribersToImport: any[] =
-      [];
+    const subscribersToImport:
+      Array<{
+        company_id: string;
+        name: string | null;
+        company: string | null;
+        email: string;
+        member_type: string;
+        active: boolean;
+      }> = [];
 
     let skippedExisting = 0;
     let skippedDuplicate = 0;
@@ -89,92 +141,96 @@ export async function POST(request: Request) {
     const emailPattern =
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    for (const s of uploadedSubscribers) {
+    for (
+      const subscriber of
+        uploadedSubscribers
+    ) {
       const email =
-        String(s.email ?? "")
-          .trim()
-          .toLowerCase();
+        cleanEmailAddress(
+          subscriber.email
+        );
 
       const name =
-        String(s.name ?? "")
-          .trim();
+        String(
+          subscriber.name ?? ""
+        ).trim();
 
-      const company =
-        String(s.company ?? "")
-          .trim();
+      const subscriberCompany =
+        String(
+          subscriber.company ?? ""
+        ).trim();
 
       const memberType =
         String(
-          s.member_type ??
+          subscriber.member_type ??
             "Industry"
         ).trim();
 
-      // ---------------------------------------
-      // INVALID EMAIL
-      // ---------------------------------------
-
       if (
         !email ||
-        !emailPattern.test(email)
+        !emailPattern.test(
+          email
+        )
       ) {
         skippedInvalid++;
         continue;
       }
 
-      // ---------------------------------------
-      // DUPLICATE INSIDE SPREADSHEET
-      // ---------------------------------------
-
       if (
-        spreadsheetEmails.has(email)
+        spreadsheetEmails.has(
+          email
+        )
       ) {
         skippedDuplicate++;
         continue;
       }
 
-      spreadsheetEmails.add(email);
-
-      // ---------------------------------------
-      // ALREADY EXISTS IN SUPABASE
-      // ---------------------------------------
+      spreadsheetEmails.add(
+        email
+      );
 
       if (
-        existingEmails.has(email)
+        existingEmails.has(
+          email
+        )
       ) {
         skippedExisting++;
         continue;
       }
 
       subscribersToImport.push({
+        company_id:
+          companyId,
+
         name:
           name || null,
 
         company:
-          company || null,
+          subscriberCompany ||
+          null,
 
         email,
 
         member_type:
-          memberType || "Industry",
+          memberType ||
+          "Industry",
 
         active: true,
       });
     }
 
     // -----------------------------------------
-    // IMPORT SUBSCRIBERS
+    // INSERT
     // -----------------------------------------
 
     let imported = 0;
-
     let skippedDatabaseDuplicate =
       0;
-
     let failed = 0;
 
     for (
-      const subscriber
-      of subscribersToImport
+      const subscriber of
+        subscribersToImport
     ) {
       const {
         error,
@@ -183,9 +239,9 @@ export async function POST(request: Request) {
         .insert(subscriber);
 
       if (error) {
-        // Duplicate caught by database
         if (
-          error.code === "23505"
+          error.code ===
+          "23505"
         ) {
           skippedDatabaseDuplicate++;
           continue;
@@ -203,20 +259,16 @@ export async function POST(request: Request) {
 
       imported++;
 
-      // Add immediately so the same
-      // email cannot be re-imported later
-      // in this request.
       existingEmails.add(
         subscriber.email
       );
     }
 
-    // -----------------------------------------
-    // RESULT
-    // -----------------------------------------
-
     return NextResponse.json({
       success: true,
+
+      company:
+        tenant.company.name,
 
       imported,
 
@@ -236,24 +288,23 @@ export async function POST(request: Request) {
       totalSubscribers:
         existingEmails.size,
     });
-
   } catch (error) {
-    console.error(
-      "SUBSCRIBER IMPORT ERROR:",
-      error
-    );
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
 
     return NextResponse.json(
       {
         success: false,
-
-        error:
-          error instanceof Error
-            ? error.message
-            : String(error),
+        error: message,
       },
       {
-        status: 500,
+        status:
+          message ===
+          "Authentication required."
+            ? 401
+            : 403,
       }
     );
   }

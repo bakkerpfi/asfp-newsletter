@@ -1,28 +1,77 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { requireCompanyAccess } from "@/lib/tenant-auth";
 
-export async function POST(request: Request) {
+export async function POST(
+  request: NextRequest
+) {
   try {
-    const body = await request.json();
+    const body =
+      await request.json();
 
-    const { error } = await supabase
+    const companySlug =
+      String(
+        body.companySlug ?? ""
+      ).trim();
+
+    const tenant =
+      await requireCompanyAccess(
+        companySlug
+      );
+
+    const subscriberId =
+      Number(body.id);
+
+    if (
+      !Number.isFinite(
+        subscriberId
+      )
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Invalid subscriber ID.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const {
+      data,
+      error,
+    } = await supabase
       .from("subscribers")
       .update({
         active: true,
         unsubscribed_at: null,
       })
-      .eq("id", body.id);
+      .eq(
+        "id",
+        subscriberId
+      )
+      .eq(
+        "company_id",
+        tenant.company.id
+      )
+      .select("id")
+      .maybeSingle();
 
     if (error) {
-      console.error("REACTIVATE SUBSCRIBER ERROR:", error);
+      throw error;
+    }
 
+    if (!data) {
       return NextResponse.json(
         {
           success: false,
-          error: error.message,
+          error:
+            "Subscriber was not found for this company.",
         },
         {
-          status: 500,
+          status: 404,
         }
       );
     }
@@ -30,17 +79,23 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
     });
-
   } catch (error) {
-    console.error("REACTIVATE SUBSCRIBER ERROR:", error);
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
 
     return NextResponse.json(
       {
         success: false,
-        error: String(error),
+        error: message,
       },
       {
-        status: 500,
+        status:
+          message ===
+          "Authentication required."
+            ? 401
+            : 403,
       }
     );
   }

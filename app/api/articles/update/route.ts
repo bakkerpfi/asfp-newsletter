@@ -1,49 +1,166 @@
-import { NextResponse } from "next/server";
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server";
+
 import { supabase } from "@/lib/supabase";
+import { requireCompanyAccess } from "@/lib/tenant-auth";
 
-export async function POST(request: Request) {
+export async function POST(
+  request: NextRequest
+) {
   try {
-    const body = await request.json();
+    const body =
+      await request.json();
 
-    const { error } = await supabase
-      .from("articles")
-      .update({
-        issue_id: body.issue_id,
-        title: body.title,
-        category: body.category,
-        author: body.author,
-        content: body.content,
-      })
-      .eq("id", body.id);
+    const tenant =
+      await requireCompanyAccess(
+        String(
+          body.companySlug ?? ""
+        ).trim()
+      );
 
-    if (error) {
-      console.error("UPDATE ARTICLE ERROR:", error);
+    const articleId =
+      Number(body.id);
 
+    const issueId =
+      Number(body.issue_id);
+
+    if (
+      !Number.isFinite(articleId) ||
+      !Number.isFinite(issueId)
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: error.message,
+          error:
+            "Invalid article or issue ID.",
         },
         {
-          status: 500,
+          status: 400,
+        }
+      );
+    }
+
+    // Verify destination issue belongs
+    // to this company.
+
+    const {
+      data: issue,
+      error: issueError,
+    } = await supabase
+      .from("issues")
+      .select("id")
+      .eq("id", issueId)
+      .eq(
+        "company_id",
+        tenant.company.id
+      )
+      .maybeSingle();
+
+    if (issueError) {
+      throw issueError;
+    }
+
+    if (!issue) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "The selected issue does not belong to this company.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("articles")
+      .update({
+        issue_id:
+          issueId,
+
+        title:
+          String(
+            body.title ?? ""
+          ).trim(),
+
+        category:
+          String(
+            body.category ?? ""
+          ).trim() || null,
+
+        author:
+          String(
+            body.author ?? ""
+          ).trim() || null,
+
+        author_id:
+          body.author_id || null,
+
+        content:
+          String(
+            body.content ?? ""
+          ).trim() || null,
+      })
+      .eq(
+        "id",
+        articleId
+      )
+      .eq(
+        "company_id",
+        tenant.company.id
+      )
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Article was not found for this company.",
+        },
+        {
+          status: 404,
         }
       );
     }
 
     return NextResponse.json({
       success: true,
+      article: data,
     });
-
   } catch (error) {
-    console.error("POST UPDATE ERROR:", error);
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    console.error(
+      "UPDATE ARTICLE ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
         success: false,
-        error: String(error),
+        error: message,
       },
       {
-        status: 500,
+        status:
+          message ===
+          "Authentication required."
+            ? 401
+            : 403,
       }
     );
   }

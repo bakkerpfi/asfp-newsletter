@@ -1,124 +1,352 @@
-import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server";
 
-export async function GET() {
+import { supabase } from "@/lib/supabase";
+import { requireCompanyAccess } from "@/lib/tenant-auth";
+
+function errorResponse(
+  error: unknown
+) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : String(error);
+
+  const status =
+    message ===
+    "Authentication required."
+      ? 401
+      : message.includes("access")
+      ? 403
+      : 400;
+
+  return NextResponse.json(
+    {
+      success: false,
+      error: message,
+    },
+    {
+      status,
+    }
+  );
+}
+
+// =========================================================
+// GET COMPANY ISSUES
+// =========================================================
+
+export async function GET(
+  request: NextRequest
+) {
   try {
-    const { data, error } = await supabase
+    const companySlug =
+      request.nextUrl.searchParams.get(
+        "company"
+      );
+
+    const tenant =
+      await requireCompanyAccess(
+        companySlug
+      );
+
+    const {
+      data,
+      error,
+    } = await supabase
       .from("issues")
       .select("*")
-      .order("id", { ascending: false });
-
-    console.log("GET DATA:", data);
-    console.log("GET ERROR:", error);
+      .eq(
+        "company_id",
+        tenant.company.id
+      )
+      .order("id", {
+        ascending: false,
+      });
 
     if (error) {
-      return NextResponse.json(error, { status: 500 });
+      throw error;
     }
 
-    return NextResponse.json(data);
-
-  } catch (error) {
-    console.error("GET ERROR:", error);
-
     return NextResponse.json(
-      {
-        success: false,
-        error: String(error),
-      },
-      {
-        status: 500,
-      }
+      data ?? []
     );
+  } catch (error) {
+    console.error(
+      "GET ISSUES ERROR:",
+      error
+    );
+
+    return errorResponse(error);
   }
 }
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
+// =========================================================
+// CREATE COMPANY ISSUE
+// =========================================================
 
-    const { data, error } = await supabase
-      .from("issues")
-      .insert([
+export async function POST(
+  request: NextRequest
+) {
+  try {
+    const body =
+      await request.json();
+
+    const companySlug =
+      String(
+        body.companySlug ?? ""
+      ).trim();
+
+    const tenant =
+      await requireCompanyAccess(
+        companySlug
+      );
+
+    const title =
+      String(
+        body.title ?? ""
+      ).trim();
+
+    const issueNumber =
+      String(
+        body.issue_number ?? ""
+      ).trim();
+
+    const month =
+      String(
+        body.month ?? ""
+      ).trim();
+
+    const year =
+      Number(body.year);
+
+    const summary =
+      String(
+        body.summary ?? ""
+      ).trim();
+
+    if (!title) {
+      return NextResponse.json(
         {
-          title: body.title,
-          issue_number: body.issue_number,
-          month: body.month,
-          year: Number(body.year),
-          summary: body.summary,
+          success: false,
+          error:
+            "Issue title is required.",
         },
-      ])
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (!issueNumber) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Issue number is required.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      !Number.isInteger(year) ||
+      year < 2000 ||
+      year > 2100
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Please enter a valid year.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("issues")
+      .insert({
+        company_id:
+          tenant.company.id,
+
+        title,
+
+        issue_number:
+          issueNumber,
+
+        month:
+          month || null,
+
+        year,
+
+        summary:
+          summary || null,
+
+        published: false,
+      })
       .select()
       .single();
 
     if (error) {
-      console.error("SUPABASE INSERT ERROR:", error);
       throw error;
     }
 
     return NextResponse.json({
       success: true,
       id: data.id,
+      issue: data,
     });
-
   } catch (error) {
-    console.error("POST ERROR:", error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: String(error),
-      },
-      {
-        status: 500,
-      }
+    console.error(
+      "CREATE ISSUE ERROR:",
+      error
     );
+
+    return errorResponse(error);
   }
 }
 
-export async function PUT(request: Request) {
+// =========================================================
+// UPDATE COMPANY ISSUE
+// =========================================================
+
+export async function PUT(
+  request: NextRequest
+) {
   try {
-    const body = await request.json();
+    const body =
+      await request.json();
 
-    const { error } = await supabase
-      .from("issues")
-      .update({
-        title: body.title,
-        issue_number: body.issue_number,
-        month: body.month,
-        year: Number(body.year),
-        summary: body.summary,
-      })
-      .eq("id", body.id);
+    const companySlug =
+      String(
+        body.companySlug ?? ""
+      ).trim();
 
-    if (error) {
-      console.error("SUPABASE UPDATE ERROR:", error);
+    const tenant =
+      await requireCompanyAccess(
+        companySlug
+      );
 
+    const issueId =
+      Number(body.id);
+
+    if (
+      !Number.isFinite(issueId)
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: error.message,
+          error:
+            "Invalid issue ID.",
         },
         {
-          status: 500,
+          status: 400,
+        }
+      );
+    }
+
+    const title =
+      String(
+        body.title ?? ""
+      ).trim();
+
+    const issueNumber =
+      String(
+        body.issue_number ?? ""
+      ).trim();
+
+    const month =
+      String(
+        body.month ?? ""
+      ).trim();
+
+    const year =
+      Number(body.year);
+
+    const summary =
+      String(
+        body.summary ?? ""
+      ).trim();
+
+    if (!title) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Issue title is required.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("issues")
+      .update({
+        title,
+
+        issue_number:
+          issueNumber,
+
+        month:
+          month || null,
+
+        year,
+
+        summary:
+          summary || null,
+      })
+      .eq(
+        "id",
+        issueId
+      )
+      .eq(
+        "company_id",
+        tenant.company.id
+      )
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Issue was not found for this company.",
+        },
+        {
+          status: 404,
         }
       );
     }
 
     return NextResponse.json({
       success: true,
+      issue: data,
     });
-
   } catch (error) {
-    console.error("PUT ERROR:", error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: String(error),
-      },
-      {
-        status: 500,
-      }
+    console.error(
+      "UPDATE ISSUE ERROR:",
+      error
     );
+
+    return errorResponse(error);
   }
 }

@@ -1,11 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabase } from "@/lib/supabase";
+import { requireCompanyAccess } from "@/lib/tenant-auth";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const WEBSITE_URL =
-  "https://asfp-newsletter.vercel.app";
+  process.env.WEBSITE_URL ||
+  "http://localhost:3000";
 
 const RESEND_BATCH_SIZE = 100;
 const DATABASE_PAGE_SIZE = 1000;
@@ -50,10 +52,25 @@ function escapeHtml(
 
 function createEmailHtml(
   subscriber: Subscriber,
-  issueId: number
+  issue: {
+    id: number;
+    issue_number: string | number | null;
+    title: string | null;
+    month: string | null;
+    year: number | null;
+  },
+company: {
+  name: string;
+  logo_url: string | null;
+  primary_colour: string;
+  secondary_colour: string;
+  website_url: string | null;
+  sender_name: string | null;
+  sender_email: string | null;
+}
 ) {
   const newsletterUrl =
-    `${WEBSITE_URL}/newsletter/${issueId}` +
+    `${WEBSITE_URL}/newsletter/${issue.id}` +
     `?u=${encodeURIComponent(
       subscriber.unsubscribe_token
     )}`;
@@ -68,108 +85,67 @@ function createEmailHtml(
     subscriber.name?.trim() || "Member"
   );
 
+  const companyName =
+    escapeHtml(company.name);
+
+  const primaryColour =
+    company.primary_colour || "#1E2D5A";
+
+  const secondaryColour =
+    company.secondary_colour || "#F52B3A";
+
+  const logoHtml = company.logo_url
+    ? `<img src="${escapeHtml(company.logo_url)}" alt="${companyName}" style="display:block;max-width:180px;max-height:90px;width:auto;height:auto;margin:0 auto;" />`
+    : `<div style="color:#ffffff;font-size:24px;font-weight:bold;text-align:center;">${companyName}</div>`;
+
+  const websiteHtml = company.website_url
+    ? `<p style="margin:8px 0 0 0;"><a href="${escapeHtml(company.website_url)}" style="color:${primaryColour};">${escapeHtml(company.website_url)}</a></p>`
+    : "";
+
   return `
-    <div
-      style="
-        font-family:Arial,Helvetica,sans-serif;
-        max-width:700px;
-        margin:0 auto;
-        color:#333;
-        line-height:1.6;
-        text-align:left;
-      "
-    >
-      <div style="margin-bottom:25px;">
-        <img
-          src="${WEBSITE_URL}/AustraliaNewZealand-03.png"
-          alt="ASFP Australia & New Zealand"
-          style="max-width:70px;height:auto;display:block;"
-        />
-      </div>
-
-      <h2 style="color:#1E2D5A;margin-top:0;">
-        Hello ${subscriberName},
-      </h2>
-
-      <p>
-        Thank you for your continued support of
-        <strong>ASFP Australia & New Zealand</strong>.
-      </p>
-
-      <p>
-        We hope you enjoy this edition of the
-        <strong>ASFP ANZ Industry Update.</strong>
-      </p>
-
-      <p>This edition includes:</p>
-
-      <ul>
-        <li>Industry News</li>
-        <li>Technical Guidance</li>
-        <li>Association Updates</li>
-        <li>Training Information</li>
-      </ul>
-
-      <p>
-        Click the button below to read the latest newsletter.
-      </p>
-
-      <p style="margin:35px 0;">
-        <a
-          href="${newsletterUrl}"
-          style="
-            background:#1E2D5A;
-            color:#ffffff;
-            padding:14px 24px;
-            text-decoration:none;
-            border-radius:6px;
-            display:inline-block;
-            font-weight:bold;
-          "
-        >
-          Read Newsletter
-        </a>
-      </p>
-
-      <hr
-        style="
-          margin:40px 0;
-          border:none;
-          border-top:1px solid #ddd;
-        "
-      />
-
-      <p style="font-size:14px;color:#666;">
-        You are receiving this email because you have previously
-        shown an interest in passive fire protection.
-      </p>
-
-      <p style="font-size:14px;color:#666;">
-        If you do not wish to receive further industry updates,
-        please unsubscribe and accept our apologies.
-      </p>
-
-      <p>
-        <a href="${unsubscribeUrl}">
-          Unsubscribe
-        </a>
-      </p>
-
-      <br />
-
-      <strong>Paul Ryan</strong><br />
-      Managing Director<br />
-      ASFP Australia & New Zealand<br /><br />
-
-      Website:
-      <a href="https://www.asfp.co.nz">
-        www.asfp.co.nz
-      </a>
-    </div>
+    <!DOCTYPE html>
+    <html>
+      <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#1e293b;">
+        <div style="max-width:700px;margin:0 auto;padding:30px 15px;">
+          <div style="background:#ffffff;border-radius:10px;overflow:hidden;">
+            <div style="background:${primaryColour};padding:25px 30px;text-align:center;border-bottom:4px solid ${secondaryColour};">
+              ${logoHtml}
+            </div>
+            <div style="padding:35px;line-height:1.7;">
+              <h2 style="color:${primaryColour};margin:0 0 20px 0;">Hello ${subscriberName},</h2>
+              <p>Thank you for your continued interest in <strong>${companyName}</strong>.</p>
+              <p>We hope you enjoy this edition of our newsletter.</p>
+              <div style="margin:28px 0;padding:20px;background:#f8fafc;border-left:4px solid ${secondaryColour};">
+                <div style="color:${primaryColour};font-size:22px;font-weight:bold;">${escapeHtml(issue.title || "Newsletter")}</div>
+                <div style="margin-top:6px;color:#64748b;font-size:14px;">
+                  Issue ${escapeHtml(String(issue.issue_number ?? issue.id))}
+                  ${issue.month || issue.year ? ` · ${escapeHtml([issue.month, issue.year].filter(Boolean).join(" "))}` : ""}
+                </div>
+              </div>
+              <p>Click the button below to read your personalised newsletter.</p>
+              <p style="margin:35px 0;">
+                <a href="${newsletterUrl}" style="background:${secondaryColour};color:#ffffff;padding:14px 24px;text-decoration:none;border-radius:6px;display:inline-block;font-weight:bold;">Read Newsletter</a>
+              </p>
+              <hr style="margin:40px 0;border:none;border-top:1px solid #e2e8f0;" />
+              <p style="font-size:13px;color:#64748b;">You are receiving this email because you are subscribed to ${companyName} updates.</p>
+              <p style="font-size:13px;color:#64748b;">If you no longer wish to receive these emails, you can unsubscribe below.</p>
+              <p><a href="${unsubscribeUrl}" style="color:${secondaryColour};">Unsubscribe</a></p>
+              <div style="margin-top:35px;color:#475569;">
+                <strong>${escapeHtml(company.sender_name || company.name)}</strong><br />
+                ${companyName}
+                ${websiteHtml}
+              </div>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
   `;
 }
 
-async function loadActiveSubscribers() {
+async function loadActiveSubscribers(
+  companyId: string
+) {
   const {
     count,
     error: countError,
@@ -179,6 +155,7 @@ async function loadActiveSubscribers() {
       count: "exact",
       head: true,
     })
+    .eq("company_id", companyId)
     .eq("active", true);
 
   if (countError) {
@@ -200,6 +177,7 @@ async function loadActiveSubscribers() {
       .select(
         "id, name, email, unsubscribe_token"
       )
+      .eq("company_id", companyId)
       .eq("active", true)
       .order("id", { ascending: true })
       .range(
@@ -222,6 +200,7 @@ async function loadActiveSubscribers() {
 }
 
 async function loadSentSubscriberIds(
+  companyId: string,
   issueId: number
 ) {
   const sentSubscriberIds = new Set<number>();
@@ -232,6 +211,7 @@ async function loadSentSubscriberIds(
     const { data, error } = await supabase
       .from("newsletter_sends")
       .select("subscriber_id")
+      .eq("company_id", companyId)
       .eq("issue_id", issueId)
       .eq("status", "sent")
       .order("subscriber_id", {
@@ -268,12 +248,14 @@ async function loadSentSubscriberIds(
   return sentSubscriberIds;
 }
 
-export async function POST() {
+export async function POST(
+  request: NextRequest
+) {
   try {
     const fromEmail =
       process.env.NEWSLETTER_FROM;
 
-    const replyTo =
+    const defaultReplyTo =
       process.env.NEWSLETTER_REPLY_TO;
 
     if (!process.env.RESEND_API_KEY) {
@@ -296,7 +278,7 @@ export async function POST() {
       );
     }
 
-    if (!replyTo) {
+    if (!defaultReplyTo) {
       return NextResponse.json(
         {
           error:
@@ -306,41 +288,100 @@ export async function POST() {
       );
     }
 
-    /*
-     * Load the latest newsletter issue.
-     */
-    const {
-      data: latestIssue,
-      error: issueError,
-    } = await supabase
-      .from("issues")
-      .select("id, issue_number")
-      .order("id", { ascending: false })
-      .limit(1)
-      .single();
+    const body = await request.json();
 
-    if (issueError || !latestIssue) {
-      console.error(
-        "ISSUE LOAD ERROR:",
-        issueError
-      );
+    const companySlug =
+      String(body.companySlug ?? "").trim();
 
+    const issueId =
+      Number(body.issueId);
+
+    if (
+      !companySlug ||
+      !Number.isFinite(issueId)
+    ) {
       return NextResponse.json(
         {
           error:
-            "No newsletter issue found.",
+            "Company and newsletter issue are required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const tenant =
+      await requireCompanyAccess(
+        companySlug
+      );
+
+    const companyId =
+      tenant.company.id;
+
+    const {
+      data: company,
+      error: companyError,
+    } = await supabase
+      .from("companies")
+.select(
+  "id,name,slug,logo_url,primary_colour,secondary_colour,website_url,sender_name,sender_email,reply_to_email"
+)
+      .eq("id", companyId)
+      .eq("active", true)
+      .maybeSingle();
+
+    if (
+      companyError ||
+      !company
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Company could not be loaded.",
         },
         { status: 404 }
       );
     }
 
-    const issueId = Number(latestIssue.id);
+    const {
+      data: latestIssue,
+      error: issueError,
+    } = await supabase
+      .from("issues")
+      .select(
+        "id,company_id,issue_number,title,month,year"
+      )
+      .eq("id", issueId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    if (issueError) {
+      throw issueError;
+    }
+
+    if (!latestIssue) {
+      return NextResponse.json(
+        {
+          error:
+            "This newsletter issue does not belong to the selected company.",
+        },
+        { status: 403 }
+      );
+    }
+
+    const companyFromEmail =
+  company.sender_email
+    ? `${company.sender_name || company.name} <${company.sender_email}>`
+    : fromEmail;
+
+    const replyTo =
+      company.reply_to_email ||
+      defaultReplyTo;
 
     /*
      * Load all active subscribers.
      */
     const subscribers =
-      await loadActiveSubscribers();
+      await loadActiveSubscribers(companyId);
 
     if (subscribers.length === 0) {
       return NextResponse.json(
@@ -356,7 +397,7 @@ export async function POST() {
      * for this particular newsletter issue.
      */
     const sentSubscriberIds =
-      await loadSentSubscriberIds(issueId);
+      await loadSentSubscriberIds(companyId, issueId);
 
     /*
      * Only retain subscribers who have not
@@ -412,15 +453,16 @@ export async function POST() {
 
       const emails = subscriberBatch.map(
         (subscriber) => ({
-          from: fromEmail,
+          from: companyFromEmail,
           replyTo,
           to: subscriber.email,
           subject:
-            `ASFP ANZ Industry Update – ` +
+            `${company.name} Newsletter – ` +
             `Issue ${latestIssue.issue_number}`,
           html: createEmailHtml(
             subscriber,
-            issueId
+            latestIssue,
+            company
           ),
         })
       );
@@ -524,6 +566,7 @@ export async function POST() {
       const sendRecords =
         subscriberBatch.map(
           (subscriber, batchIndex) => ({
+            company_id: companyId,
             issue_id: issueId,
             subscriber_id: subscriber.id,
             email: subscriber.email,
@@ -542,7 +585,7 @@ export async function POST() {
         .from("newsletter_sends")
         .upsert(sendRecords, {
           onConflict:
-            "issue_id,subscriber_id",
+            "company_id,issue_id,subscriber_id",
           ignoreDuplicates: true,
         });
 
@@ -628,7 +671,8 @@ export async function POST() {
   .update({
     campaign_complete: remaining === 0,
   })
-  .eq("id", issueId); 
+  .eq("id", issueId)
+  .eq("company_id", companyId); 
 
     return NextResponse.json({
       success: failedCount === 0,

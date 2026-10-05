@@ -1,37 +1,29 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { requireCompanyAccess } from "@/lib/tenant-auth";
 
 const DATABASE_PAGE_SIZE = 1000;
 
-/*
- * Returns the most recent announcement campaign
- * that has not been completed.
- *
- * This allows the admin page to recover a campaign
- * after a browser refresh, lost connection or timeout.
- */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // Find the latest unfinished campaign
+    const companySlug =
+      request.nextUrl.searchParams.get("company");
+
+    const tenant =
+      await requireCompanyAccess(companySlug);
+
+    const companyId =
+      tenant.company.id;
+
     const {
       data: campaign,
       error: campaignError,
     } = await supabase
       .from("announcement_campaigns")
       .select(
-        `
-        id,
-        subject,
-        heading,
-        content,
-        button_text,
-        button_link,
-        status,
-        created_at,
-        started_at,
-        completed_at
-        `
+        "id,subject,heading,content,button_text,button_link,status,created_at,started_at,completed_at"
       )
+      .eq("company_id", companyId)
       .in("status", [
         "sending",
         "partial",
@@ -43,12 +35,9 @@ export async function GET() {
       .maybeSingle();
 
     if (campaignError) {
-      throw new Error(
-        campaignError.message
-      );
+      throw campaignError;
     }
 
-    // No unfinished campaign exists
     if (!campaign) {
       return NextResponse.json({
         success: true,
@@ -59,47 +48,40 @@ export async function GET() {
     const campaignId =
       Number(campaign.id);
 
-    // Count how many recipients have
-    // already been recorded as sent
     const {
       count: sentCount,
-      error: sentCountError,
+      error: sentError,
     } = await supabase
       .from("announcement_sends")
       .select("*", {
         count: "exact",
         head: true,
       })
+      .eq("company_id", companyId)
       .eq(
         "campaign_id",
         campaignId
       )
       .eq("status", "sent");
 
-    if (sentCountError) {
-      throw new Error(
-        sentCountError.message
-      );
+    if (sentError) {
+      throw sentError;
     }
 
-    // Count unique active subscriber emails.
-    // We load them because duplicate subscriber
-    // records may share the same email address.
     const {
       count: rawActiveCount,
-      error: activeCountError,
+      error: activeError,
     } = await supabase
       .from("subscribers")
       .select("*", {
         count: "exact",
         head: true,
       })
+      .eq("company_id", companyId)
       .eq("active", true);
 
-    if (activeCountError) {
-      throw new Error(
-        activeCountError.message
-      );
+    if (activeError) {
+      throw activeError;
     }
 
     const uniqueEmails =
@@ -116,6 +98,7 @@ export async function GET() {
       } = await supabase
         .from("subscribers")
         .select("email")
+        .eq("company_id", companyId)
         .eq("active", true)
         .order("id", {
           ascending: true,
@@ -128,12 +111,12 @@ export async function GET() {
         );
 
       if (error) {
-        throw new Error(
-          error.message
-        );
+        throw error;
       }
 
-      for (const row of data ?? []) {
+      for (
+        const row of data ?? []
+      ) {
         const email =
           String(row.email ?? "")
             .trim()
@@ -157,9 +140,26 @@ export async function GET() {
         0
       );
 
+    if (remaining === 0) {
+      await supabase
+        .from("announcement_campaigns")
+        .update({
+          status: "completed",
+          completed_at:
+            campaign.completed_at ||
+            new Date().toISOString(),
+        })
+        .eq("company_id", companyId)
+        .eq("id", campaignId);
+
+      return NextResponse.json({
+        success: true,
+        campaign: null,
+      });
+    }
+
     return NextResponse.json({
       success: true,
-
       campaign: {
         id: campaignId,
         subject:
@@ -178,28 +178,28 @@ export async function GET() {
           campaign.created_at,
         startedAt:
           campaign.started_at,
-
         totalSubscribers,
         sent,
         remaining,
       },
     });
   } catch (error) {
-    console.error(
-      "ANNOUNCEMENT CAMPAIGN STATUS ERROR:",
-      error
-    );
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
 
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unexpected error.",
+        error: message,
       },
       {
-        status: 500,
+        status:
+          message ===
+          "Authentication required."
+            ? 401
+            : 403,
       }
     );
   }

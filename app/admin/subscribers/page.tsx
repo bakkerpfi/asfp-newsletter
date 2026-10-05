@@ -1,632 +1,182 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import AdminSidebar from "@/components/AdminSidebar";
-import * as XLSX from "xlsx";
+import SubscribersManager from "@/components/SubscribersManager";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { redirect } from "next/navigation";
 
-export default function SubscribersPage() {
+type SubscribersPageProps = {
+  searchParams: Promise<{
+    company?: string;
+    status?: string;
+  }>;
+};
 
-  const [statusFilter, setStatusFilter] =
-  useState("all");
+type Company = {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  primary_colour: string;
+  secondary_colour: string;
+};
 
-  const [search, setSearch] = useState("");
+export default async function SubscribersPage({
+  searchParams,
+}: SubscribersPageProps) {
+  const params = await searchParams;
 
-  const [name, setName] = useState("");
-  const [company, setCompany] = useState("");
-  const [email, setEmail] = useState("");
+  // =====================================================
+  // AUTHENTICATED USER
+  // =====================================================
 
-  const [subscribers, setSubscribers] = useState<any[]>([]);
+  const supabase =
+    await createSupabaseServerClient();
 
-  async function loadSubscribers() {
-    const response = await fetch("/api/subscribers");
-    const data = await response.json();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-    setSubscribers(data);
+  if (!user) {
+    redirect("/login");
   }
 
-  async function saveSubscriber() {
-    const response = await fetch("/api/subscribers", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name,
-        company,
-        email,
-        member_type: "Member",
-      }),
-    });
+  // =====================================================
+  // PROFILE
+  // =====================================================
 
-    const result = await response.json();
+  const { data: profile } =
+    await supabase
+      .from("profiles")
+      .select(
+        "id,full_name,platform_admin"
+      )
+      .eq("id", user.id)
+      .single();
 
-    if (!result.success) {
-      alert(result.error);
-      return;
-    }
+  // =====================================================
+  // COMPANY MEMBERSHIPS
+  // =====================================================
 
-    alert("Subscriber added successfully.");
+  const { data: memberships } =
+    await supabase
+      .from("company_users")
+      .select(
+        "company_id,role"
+      )
+      .eq("user_id", user.id);
 
-    setName("");
-    setCompany("");
-    setEmail("");
+  const companyIds =
+    memberships?.map(
+      (membership) =>
+        membership.company_id
+    ) ?? [];
 
-    loadSubscribers();
+  // =====================================================
+  // AUTHORISED COMPANIES
+  // =====================================================
+
+  let companies: Company[] = [];
+
+  if (companyIds.length > 0) {
+    const { data: companyData } =
+      await supabase
+        .from("companies")
+        .select(
+          "id,name,slug,logo_url,primary_colour,secondary_colour"
+        )
+        .in("id", companyIds)
+        .eq("active", true)
+        .order("name", {
+          ascending: true,
+        });
+
+    companies =
+      (companyData ?? []) as Company[];
   }
 
-  async function importExcel(
-    event: React.ChangeEvent<HTMLInputElement>
-  ) {
-    const file = event.target.files?.[0];
+  // =====================================================
+  // NO COMPANY ACCESS
+  // =====================================================
 
-    if (!file) return;
+  if (companies.length === 0) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 p-8">
+        <div className="max-w-lg rounded-xl bg-white p-10 text-center shadow">
 
-    const buffer = await file.arrayBuffer();
+          <h1 className="text-2xl font-bold text-slate-900">
+            No Company Access
+          </h1>
 
-    const workbook = XLSX.read(buffer);
+          <p className="mt-4 text-slate-600">
+            Your account has not been assigned
+            to an organisation.
+          </p>
 
-    const worksheet =
-      workbook.Sheets[workbook.SheetNames[0]];
-
-    const rows = XLSX.utils.sheet_to_json<any>(
-      worksheet,
-      {
-        header: 1,
-      }
+        </div>
+      </main>
     );
-
-    console.log("FIRST ROW:", rows[0]);
-
-    const subscribers = rows
-      .slice(4)
-      .map((row: any[]) => {
-        const email = String(
-          row[0] ?? ""
-        ).trim();
-
-        const company = String(
-          row[1] ?? ""
-        ).trim();
-
-        // Generate a friendly name from email
-        const localPart = email.split("@")[0];
-
-        const generatedName = localPart
-          .replace(/[._-]+/g, " ")
-          .replace(/\b\w/g, (c) =>
-            c.toUpperCase()
-          );
-
-        return {
-          name: generatedName,
-          company,
-          email,
-          member_type: "Industry",
-        };
-      })
-      .filter((s) => s.email);
-
-    console.log(
-      "FIRST SUBSCRIBER:",
-      subscribers[0]
-    );
-
-    const response = await fetch(
-      "/api/subscribers/import",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-        body: JSON.stringify({
-          subscribers,
-        }),
-      }
-    );
-
-    const result = await response.json();
-
-    alert(
-`Import Complete
-
-Spreadsheet Rows: ${result.totalRows}
-
-Imported: ${result.imported}
-
-Already Existing: ${result.skippedExisting}
-
-Duplicates in Spreadsheet: ${result.skippedDuplicate}
-
-Invalid Emails: ${result.skippedInvalid}
-
-Total Subscribers: ${result.totalSubscribers}`
-    );
-
-    loadSubscribers();
-
-    // Reset file picker
-    event.target.value = "";
   }
 
-useEffect(() => {
-  loadSubscribers();
+  // =====================================================
+  // CURRENT COMPANY
+  // =====================================================
 
-  const params = new URLSearchParams(
-    window.location.search
-  );
+  const requestedCompany =
+    params.company
+      ? companies.find(
+          (company) =>
+            company.slug ===
+            params.company
+        )
+      : null;
 
-  const status = params.get("status");
+  const currentCompany =
+    requestedCompany ??
+    companies[0];
 
-  if (
-    status === "active" ||
-    status === "inactive" ||
-    status === "all"
-  ) {
-    setStatusFilter(status);
-  }
-}, []);
+  const initialStatus =
+    params.status === "active" ||
+    params.status === "inactive"
+      ? params.status
+      : "all";
 
-  /*
-   * SUBSCRIBER COUNTS
-   */
-
-  const activeCount = subscribers.filter(
-    (subscriber) =>
-      subscriber.active === true
-  ).length;
-
-  const inactiveCount = subscribers.filter(
-    (subscriber) =>
-      subscriber.active === false
-  ).length;
-
-  /*
-   * FILTER + SEARCH
-   */
-
-  const filteredSubscribers =
-    subscribers.filter((subscriber) => {
-
-      // STATUS FILTER
-
-      if (
-        statusFilter === "active" &&
-        subscriber.active !== true
-      ) {
-        return false;
-      }
-
-      if (
-        statusFilter === "inactive" &&
-        subscriber.active !== false
-      ) {
-        return false;
-      }
-
-      // SEARCH FILTER
-
-      const searchText = search
-        .trim()
-        .toLowerCase();
-
-      if (!searchText) {
-        return true;
-      }
-
-      const subscriberName = String(
-        subscriber.name ?? ""
-      ).toLowerCase();
-
-      const subscriberCompany = String(
-        subscriber.company ?? ""
-      ).toLowerCase();
-
-      const subscriberEmail = String(
-        subscriber.email ?? ""
-      ).toLowerCase();
-
-      return (
-        subscriberName.includes(searchText) ||
-        subscriberCompany.includes(searchText) ||
-        subscriberEmail.includes(searchText)
-      );
-    });
+  // =====================================================
+  // PAGE
+  // =====================================================
 
   return (
     <div className="flex">
 
-      <AdminSidebar />
+      <AdminSidebar
+        companies={companies}
+        currentCompany={currentCompany}
+        platformAdmin={
+          profile?.platform_admin ??
+          false
+        }
+      />
 
       <main className="flex-1 bg-slate-100 p-10">
 
-        <h1 className="text-4xl font-bold text-[#1E2D5A]">
+        <h1 className="text-4xl font-bold text-slate-900">
           Subscribers
         </h1>
 
         <p className="mt-2 text-slate-600">
-          Manage ASFP newsletter subscribers.
+          Manage newsletter subscribers for{" "}
+          <strong>
+            {currentCompany.name}
+          </strong>
+          .
         </p>
 
-        {/* EXCEL FILE INPUT */}
-
-        <input
-          id="excelImport"
-          type="file"
-          accept=".xlsx"
-          className="hidden"
-          onChange={importExcel}
+        <SubscribersManager
+          currentCompany={
+            currentCompany
+          }
+          initialStatus={
+            initialStatus
+          }
         />
-
-        {/* ADD / IMPORT */}
-
-        <div className="mt-8 rounded-xl bg-white p-8 shadow">
-
-          <h2 className="mb-6 text-2xl font-bold text-[#1E2D5A]">
-            Add Subscribers
-          </h2>
-
-          <div className="grid gap-4">
-
-            <input
-              className="rounded border p-3"
-              placeholder="Name"
-              value={name}
-              onChange={(e) =>
-                setName(e.target.value)
-              }
-            />
-
-            <input
-              className="rounded border p-3"
-              placeholder="Company"
-              value={company}
-              onChange={(e) =>
-                setCompany(e.target.value)
-              }
-            />
-
-            <input
-              className="rounded border p-3"
-              placeholder="Email"
-              value={email}
-              onChange={(e) =>
-                setEmail(e.target.value)
-              }
-            />
-
-            <div className="flex flex-wrap gap-4">
-
-              <button
-                onClick={saveSubscriber}
-                className="rounded bg-red-500 px-6 py-3 text-white hover:bg-red-600"
-              >
-                Add Subscriber
-              </button>
-
-              <label
-                htmlFor="excelImport"
-                className="cursor-pointer rounded bg-blue-600 px-6 py-3 text-white hover:bg-blue-700"
-              >
-                Import Excel
-              </label>
-
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* SUBSCRIBER MANAGEMENT */}
-
-        <div className="mt-8 rounded-xl bg-white p-8 shadow">
-
-          {/* HEADER */}
-
-          <div className="flex flex-wrap items-start justify-between gap-4">
-
-            <div>
-
-              <h2 className="text-2xl font-bold text-[#1E2D5A]">
-                Subscribers
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Showing{" "}
-                <strong>
-                  {filteredSubscribers.length}
-                </strong>{" "}
-                of{" "}
-                <strong>
-                  {subscribers.length}
-                </strong>{" "}
-                subscribers
-              </p>
-
-            </div>
-
-            {/* EXPORT */}
-
-            <div className="flex flex-wrap gap-3">
-
-              <a
-                href="/api/subscribers/export?status=active"
-                className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
-              >
-                Export Active
-              </a>
-
-              <a
-                href="/api/subscribers/export?status=inactive"
-                className="rounded bg-orange-600 px-4 py-2 text-white hover:bg-orange-700"
-              >
-                Export Unsubscribed
-              </a>
-
-              <a
-                href="/api/subscribers/export?status=all"
-                className="rounded bg-blue-700 px-4 py-2 text-white hover:bg-blue-800"
-              >
-                Export All
-              </a>
-
-            </div>
-
-          </div>
-
-          {/* FILTERS */}
-
-          <div className="mt-6 rounded-xl border bg-slate-50 p-5">
-
-            <div className="flex flex-wrap gap-3">
-
-              {/* ALL */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  setStatusFilter("all")
-                }
-                className={`rounded-lg px-5 py-2 font-semibold transition ${
-                  statusFilter === "all"
-                    ? "bg-[#1E2D5A] text-white"
-                    : "border bg-white text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                All ({subscribers.length})
-              </button>
-
-              {/* ACTIVE */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  setStatusFilter("active")
-                }
-                className={`rounded-lg px-5 py-2 font-semibold transition ${
-                  statusFilter === "active"
-                    ? "bg-green-600 text-white"
-                    : "border bg-white text-green-700 hover:bg-green-50"
-                }`}
-              >
-                Active ({activeCount})
-              </button>
-
-              {/* UNSUBSCRIBED */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  setStatusFilter("inactive")
-                }
-                className={`rounded-lg px-5 py-2 font-semibold transition ${
-                  statusFilter === "inactive"
-                    ? "bg-orange-600 text-white"
-                    : "border bg-white text-orange-700 hover:bg-orange-50"
-                }`}
-              >
-                Unsubscribed ({inactiveCount})
-              </button>
-
-            </div>
-
-            {/* SEARCH */}
-
-            <div className="mt-4">
-
-              <input
-                type="text"
-                value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
-                }
-                placeholder="Search by name, company or email..."
-                className="w-full rounded-lg border bg-white p-3"
-              />
-
-            </div>
-
-          </div>
-
-          {/* TABLE */}
-
-          <div className="mt-6 overflow-x-auto">
-
-            <table className="w-full">
-
-              <thead>
-
-                <tr className="border-b">
-
-                  <th className="py-3 text-left">
-                    Name
-                  </th>
-
-                  <th className="py-3 text-left">
-                    Company
-                  </th>
-
-                  <th className="py-3 text-left">
-                    Email
-                  </th>
-
-                  <th className="py-3 text-left">
-                    Status
-                  </th>
-
-                  <th className="py-3 text-left">
-                    Actions
-                  </th>
-
-                </tr>
-
-              </thead>
-
-              <tbody>
-
-                {filteredSubscribers.map(
-                  (subscriber) => (
-
-                    <tr
-                      key={subscriber.id}
-                      className="border-b"
-                    >
-
-                      <td className="py-3">
-                        {subscriber.name}
-                      </td>
-
-                      <td className="py-3">
-                        {subscriber.company}
-                      </td>
-
-                      <td className="py-3">
-                        {subscriber.email}
-                      </td>
-
-                      <td className="py-3">
-
-                        {subscriber.active ? (
-
-                          <span className="rounded bg-green-100 px-2 py-1 text-green-700">
-                            Active
-                          </span>
-
-                        ) : (
-
-                          <span className="rounded bg-orange-100 px-2 py-1 text-orange-700">
-                            Unsubscribed
-                          </span>
-
-                        )}
-
-                      </td>
-
-                      <td className="py-3">
-
-                        {subscriber.active ? (
-
-                          <button
-                            onClick={async () => {
-
-                              if (
-                                !confirm(
-                                  `Delete ${subscriber.email}?`
-                                )
-                              ) {
-                                return;
-                              }
-
-                              await fetch(
-                                "/api/subscribers/delete",
-                                {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type":
-                                      "application/json",
-                                  },
-                                  body: JSON.stringify({
-                                    id: subscriber.id,
-                                  }),
-                                }
-                              );
-
-                              loadSubscribers();
-                            }}
-                            className="rounded bg-red-500 px-4 py-2 text-white hover:bg-red-600"
-                          >
-                            Delete
-                          </button>
-
-                        ) : (
-
-                          <button
-                            onClick={async () => {
-
-                              const confirmed =
-                                confirm(
-                                  `Reactivate ${subscriber.email}?`
-                                );
-
-                              if (!confirmed) {
-                                return;
-                              }
-
-                              await fetch(
-                                "/api/subscribers/reactivate",
-                                {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type":
-                                      "application/json",
-                                  },
-                                  body: JSON.stringify({
-                                    id: subscriber.id,
-                                  }),
-                                }
-                              );
-
-                              loadSubscribers();
-                            }}
-                            className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
-                          >
-                            Reactivate
-                          </button>
-
-                        )}
-
-                      </td>
-
-                    </tr>
-
-                  )
-                )}
-
-                {/* NO RESULTS */}
-
-                {filteredSubscribers.length ===
-                  0 && (
-
-                  <tr>
-
-                    <td
-                      colSpan={5}
-                      className="py-12 text-center text-slate-500"
-                    >
-                      No subscribers found.
-                    </td>
-
-                  </tr>
-
-                )}
-
-              </tbody>
-
-            </table>
-
-          </div>
-
-        </div>
 
       </main>
 
