@@ -585,7 +585,7 @@ export async function POST(
         .from("newsletter_sends")
         .upsert(sendRecords, {
           onConflict:
-            "issue_id,subscriber_id",
+            "company_id,issue_id,subscriber_id",
           ignoreDuplicates: true,
         });
 
