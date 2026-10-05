@@ -277,6 +277,41 @@ export default async function AdminPage({
     articles?.slice(0, 5) ?? [];
 
   // =====================================================
+  // CAMPAIGN STATUS
+  // =====================================================
+
+  const latestIssueComplete =
+    latestIssue?.campaign_complete ?? false;
+
+  let lastCampaignSentAt: string | null = null;
+
+  if (latestIssue) {
+    const { data: lastSend } = await supabase
+      .from("newsletter_sends")
+      .select("sent_at")
+      .eq("company_id", companyId)
+      .eq("issue_id", latestIssue.id)
+      .eq("status", "sent")
+      .order("sent_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    lastCampaignSentAt =
+      lastSend?.sent_at ?? null;
+  }
+
+  const lastCampaignLabel =
+    lastCampaignSentAt
+      ? new Intl.DateTimeFormat("en-NZ", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }).format(
+          new Date(lastCampaignSentAt)
+        )
+      : "Never Sent";
+
+  // =====================================================
   // UI
   // =====================================================
 
@@ -547,10 +582,17 @@ export default async function AdminPage({
               <p className="text-slate-500">
                 Status
               </p>
-
-              <p className="text-3xl font-bold text-orange-600">
-                Draft
-              </p>
+                          <p
+                className={`text-3xl font-bold ${
+                  latestIssueComplete
+                    ? "text-green-600"
+                    : "text-orange-600"
+                }`}
+              >
+                {latestIssueComplete
+                  ? "Complete"
+                  : "Draft"}
+              </p>  
 
             </div>
 
@@ -584,10 +626,9 @@ export default async function AdminPage({
 
               <p className="text-slate-500">
                 Last Campaign
-              </p>
-
-              <p className="text-3xl font-bold text-slate-700">
-                Never Sent
+            </p>
+                <p className="text-3xl font-bold text-slate-700">
+              {lastCampaignLabel}
               </p>
 
             </div>
