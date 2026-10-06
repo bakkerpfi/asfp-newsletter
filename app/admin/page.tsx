@@ -74,23 +74,37 @@ export default async function AdminPage({
   // AUTHORISED COMPANIES
   // =====================================================
 
-  let companies: Company[] = [];
+let companies: Company[] = [];
 
-  if (companyIds.length > 0) {
-    const { data: companyData } =
-      await userSupabase
-        .from("companies")
-        .select(
-          "id,name,slug,logo_url,primary_colour,secondary_colour"
-        )
-        .in("id", companyIds)
-        .eq("active", true)
-        .order("name", {
-          ascending: true,
-        });
+if (profile?.platform_admin) {
+  const { data: companyData } =
+    await userSupabase
+      .from("companies")
+      .select(
+        "id,name,slug,logo_url,primary_colour,secondary_colour"
+      )
+      .eq("active", true)
+      .order("name", {
+        ascending: true,
+      });
 
-    companies =
-      (companyData ?? []) as Company[];
+  companies =
+    (companyData ?? []) as Company[];
+} else if (companyIds.length > 0) {
+  const { data: companyData } =
+    await userSupabase
+      .from("companies")
+      .select(
+        "id,name,slug,logo_url,primary_colour,secondary_colour"
+      )
+      .in("id", companyIds)
+      .eq("active", true)
+      .order("name", {
+        ascending: true,
+      });
+
+  companies =
+    (companyData ?? []) as Company[];
   }
 
   // =====================================================
