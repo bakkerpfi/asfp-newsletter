@@ -96,7 +96,7 @@ export default function InviteAcceptance({
       setMsg(
         error instanceof Error
           ? error.message
-          : "Unable to send secure setup link."
+          : "Unable to send secure sign-in link."
       );
     } finally {
       setBusy(false);
@@ -130,7 +130,7 @@ export default function InviteAcceptance({
       }
 
       window.location.href =
-        `/admin/settings?company=${encodeURIComponent(
+        `/admin?company=${encodeURIComponent(
           data.company.slug
         )}`;
     } catch (error) {
@@ -147,6 +147,7 @@ export default function InviteAcceptance({
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
       <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl">
+
         {/* CODEXUS HEADER */}
 
         <div className="bg-slate-950 p-10 text-center text-white">
@@ -161,11 +162,12 @@ export default function InviteAcceptance({
           </h1>
 
           <p className="mt-2 text-slate-300">
-            Company Setup Invitation
+            Workspace Invitation
           </p>
         </div>
 
         <div className="p-10">
+
           {msg && (
             <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
               {msg}
@@ -173,20 +175,26 @@ export default function InviteAcceptance({
           )}
 
           <h2 className="text-2xl font-bold text-slate-900">
-            You've been invited to set up{" "}
+            You've been invited to{" "}
             {i.companies?.name}.
           </h2>
 
           <p className="mt-4 leading-7 text-slate-600">
-            Hi {i.contact_name}, this secure invitation
-            gives you administrator access to your
-            company's Codexus Newsletter workspace.
+            Hi {i.contact_name}, you've been invited as
+            an administrator of the{" "}
+            <strong>{i.companies?.name}</strong>{" "}
+            Codexus Newsletter workspace.
           </p>
 
           <div className="mt-6 rounded-xl bg-slate-50 p-5 text-sm">
             <div>
               <strong>Invited email:</strong>{" "}
               {i.contact_email}
+            </div>
+
+            <div className="mt-2">
+              <strong>Access:</strong>{" "}
+              Company Administrator
             </div>
 
             <div className="mt-2">
@@ -245,9 +253,10 @@ export default function InviteAcceptance({
             !sent && (
               <>
                 <p className="mt-7 leading-7 text-slate-600">
-                  To protect your company, we'll send a
-                  secure setup link to the invited email
-                  address. No password is required.
+                  To securely activate your access,
+                  we'll send a sign-in link to{" "}
+                  <strong>{i.contact_email}</strong>.
+                  No password is required.
                 </p>
 
                 <button
@@ -258,7 +267,7 @@ export default function InviteAcceptance({
                 >
                   {busy
                     ? "Sending..."
-                    : "Send Secure Setup Link"}
+                    : "Send Secure Sign-In Link"}
                 </button>
               </>
             )}
@@ -270,13 +279,14 @@ export default function InviteAcceptance({
               </h3>
 
               <p className="mt-3 text-slate-600">
-                We've sent the secure setup link to{" "}
+                We've sent a secure sign-in link to{" "}
                 <strong>{i.contact_email}</strong>.
               </p>
 
               <p className="mt-2 text-sm text-slate-500">
-                Open the link in that email to continue
-                setting up {i.companies?.name}.
+                Open the link in that email to return
+                here and activate your access to{" "}
+                {i.companies?.name}.
               </p>
             </div>
           )}
@@ -285,6 +295,7 @@ export default function InviteAcceptance({
             !mismatch &&
             signedInEmail && (
               <div className="mt-7">
+
                 <div className="rounded-lg bg-green-50 p-4 text-sm text-green-800">
                   Signed in as{" "}
                   <strong>{signedInEmail}</strong>.
@@ -298,9 +309,10 @@ export default function InviteAcceptance({
                   className="mt-5 w-full rounded-lg bg-green-700 px-6 py-4 text-lg font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {busy
-                    ? "Accepting..."
-                    : "Accept Invitation & Start Setup"}
+                    ? "Activating Access..."
+                    : "Accept Invitation & Open Workspace"}
                 </button>
+
               </div>
             )}
         </div>
