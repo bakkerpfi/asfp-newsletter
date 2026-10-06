@@ -77,15 +77,16 @@ export default function InviteAcceptance({
     try {
       const next = `/invite/${i.token}`;
 
-      const { error } =
-        await supabaseBrowser.auth.signInWithOtp({
-          email: inviteEmail,
-          options: {
-            emailRedirectTo:
-              `${window.location.origin}` +
-              `/auth/callback?next=${encodeURIComponent(next)}`,
-          },
-        });
+const { error } =
+  await supabaseBrowser.auth.signInWithOtp({
+    email: inviteEmail,
+    options: {
+      shouldCreateUser: true,
+      emailRedirectTo:
+        `${process.env.NEXT_PUBLIC_SITE_URL}` +
+        `/auth/callback?next=${encodeURIComponent(next)}`,
+    },
+  });
 
       if (error) {
         throw error;
