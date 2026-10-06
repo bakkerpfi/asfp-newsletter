@@ -1,4 +1,5 @@
 import Link from "next/link";
+import SignOutButton from "@/components/SignOutButton";
 
 type Company = {
   id: string;
@@ -183,6 +184,15 @@ const sidebarColour = "#111318";
           Create Email
         </Link>
       </nav>
+            {/* ACCOUNT */}
+
+      <div className="border-t border-white/10 p-6">
+        <p className="mb-3 px-4 text-xs font-semibold uppercase tracking-wider text-white/50">
+          Account
+        </p>
+
+        <SignOutButton />
+      </div>
     </aside>
   );
 }
