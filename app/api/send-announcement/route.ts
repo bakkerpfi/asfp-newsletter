@@ -209,7 +209,7 @@ function isValidEmailAddress(
 // CREATE EMAIL HTML
 // -----------------------------------------
 
-function createEmailHtml({
+export function createEmailHtml({
   subscriber,
   company,
   heading,

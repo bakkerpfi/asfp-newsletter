@@ -220,6 +220,83 @@ async function uploadSignature(
   const [previewingAudience, setPreviewingAudience] =
     useState(false);
 
+    const [emailPreviewHtml, setEmailPreviewHtml] =
+  useState("");
+
+const [emailPreviewLoading, setEmailPreviewLoading] =
+  useState(false);
+
+  useEffect(() => {
+  const timer = window.setTimeout(
+    async () => {
+      setEmailPreviewLoading(true);
+
+      try {
+        const response = await fetch(
+          "/api/send-announcement/preview",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              companySlug,
+              heading,
+              content,
+              buttonText,
+              buttonLink,
+              includeSignature,
+              authorId:
+                includeSignature
+                  ? selectedAuthorId
+                  : null,
+            }),
+          }
+        );
+
+        const result =
+          await response.json();
+
+        if (
+          !response.ok ||
+          !result.success
+        ) {
+          console.error(
+            "EMAIL PREVIEW ERROR:",
+            result.error
+          );
+          return;
+        }
+
+        setEmailPreviewHtml(
+          result.html
+        );
+      } catch (error) {
+        console.error(
+          "EMAIL PREVIEW ERROR:",
+          error
+        );
+      } finally {
+        setEmailPreviewLoading(false);
+      }
+    },
+    350
+  );
+
+  return () => {
+    window.clearTimeout(timer);
+  };
+}, [
+  companySlug,
+  heading,
+  content,
+  buttonText,
+  buttonLink,
+  includeSignature,
+  selectedAuthorId,
+]);
+
   // -----------------------------------------
   // CHECK FOR INCOMPLETE CAMPAIGN
   // -----------------------------------------
@@ -891,159 +968,37 @@ body: JSON.stringify({
 
         </div>
 
-        <div className="overflow-hidden rounded-xl border bg-slate-100">
-
-          <div className="border-b bg-white px-6 py-4">
-
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Subject
-            </p>
-
-            <p className="mt-1 font-semibold text-slate-800">
-              {subject ||
-                "Email subject"}
-            </p>
-
-          </div>
-
-          <div className="p-4 md:p-8">
-
-            <div className="mx-auto max-w-[700px] overflow-hidden rounded-lg bg-white shadow">
-
-              <div
-                className="border-b-4 px-8 py-5 text-center"
-                style={{
-                  backgroundColor:
-                    primaryColour,
-                  borderBottomColor:
-                    secondaryColour,
-                }}
-              >
-
-                {logoUrl ? (
-                  <img
-                    src={logoUrl}
-                    alt={companyName}
-                    style={{
-                      display: "block",
-                      maxWidth: "220px",
-                      maxHeight: "90px",
-                      width: "auto",
-                      height: "auto",
-                      margin: "0 auto",
-                    }}
-                  />
-                ) : (
-                  <div className="text-2xl font-bold text-white">
-                    {companyName}
-                  </div>
-                )}
-
-              </div>
-
-              <div className="p-8 md:p-10">
-
-                <p className="mb-6 text-base text-slate-800">
-                  Hello Ben,
-                </p>
-
-                {heading && (
-                  <h1 className="mb-6 text-3xl font-bold leading-tight"
-                    style={{
-                      color: primaryColour,
-                    }}>
-                    {heading}
-                  </h1>
-                )}
-
-{content ? (
-  <div
-    className="
-      text-base leading-7 text-slate-700
-      [&_p]:mb-5
-      [&_ul]:mb-5
-      [&_ul]:list-disc
-      [&_ul]:pl-7
-      [&_ol]:mb-5
-      [&_ol]:list-decimal
-      [&_ol]:pl-7
-      [&_li]:mb-2
-      [&_a]:text-blue-700
-      [&_a]:underline
-    "
-    dangerouslySetInnerHTML={{
-      __html: content,
-    }}
-  />
-) : (
-  <p className="italic text-slate-400">
-    Your announcement content will appear here.
-  </p>
-)}
-
-{includeSignature && selectedAuthor && (
-  <div className="mt-8">
-    {selectedAuthor.signature_url && (
-      <img
-        src={selectedAuthor.signature_url}
-        alt={`${selectedAuthor.name} signature`}
-        className="mb-3 max-h-20 max-w-[220px] object-contain"
-      />
-    )}
-
-    <p className="font-bold text-slate-800">
-      {selectedAuthor.name}
+<div className="overflow-hidden rounded-xl border bg-slate-100">
+  <div className="border-b bg-white px-6 py-4">
+    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      Subject
     </p>
 
-    {selectedAuthor.job_title && (
-      <p className="text-sm text-slate-600">
-        {selectedAuthor.job_title}
-      </p>
-    )}
-
-    <p className="text-sm text-slate-600">
-      {companyName}
+    <p className="mt-1 font-semibold text-slate-800">
+      {subject || "Email subject"}
     </p>
   </div>
-)}
 
+  <div className="relative bg-slate-100 p-4 md:p-8">
+    {emailPreviewLoading && (
+      <div className="absolute right-6 top-6 z-10 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500 shadow">
+        Updating preview...
+      </div>
+    )}
 
-                {buttonText &&
-                  buttonLink && (
-                    <div className="mt-8">
-
-                      <a
-                        href={buttonLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-block rounded-md px-6 py-4 font-bold text-white no-underline"
-                        style={{
-                          backgroundColor:
-                            secondaryColour,
-                        }}
-                      >
-                        {buttonText}
-                      </a>
-
-                    </div>
-                  )}
-
-              </div>
-
-              <div className="border-t bg-slate-50 px-8 py-6 text-xs leading-5 text-slate-500">
-                <p className="font-bold text-slate-700">{companyName}</p>
-                {footerTagline && <p className="mt-1">{footerTagline}</p>}
-                {footerShowAddress && companyAddress && <p className="mt-2">{companyAddress}</p>}
-                {(footerShowPhone && footerPhone) || (footerShowWebsite && websiteUrl) ? <p className="mt-1">{footerShowPhone && footerPhone ? footerPhone : ""}{footerShowPhone && footerPhone && footerShowWebsite && websiteUrl ? " · " : ""}{footerShowWebsite && websiteUrl ? websiteUrl : ""}</p> : null}
-                <p className="mt-4">You are receiving this email because you are subscribed to {companyName} updates.</p>
-                <p className="mt-3 underline">Unsubscribe</p>
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
+    {emailPreviewHtml ? (
+      <iframe
+        title="Email preview"
+        srcDoc={emailPreviewHtml}
+        className="mx-auto block h-[900px] w-full max-w-[760px] rounded-lg border-0 bg-white"
+      />
+    ) : (
+      <div className="mx-auto max-w-[700px] rounded-lg bg-white p-10 text-center text-slate-400">
+        Email preview will appear here.
+      </div>
+    )}
+  </div>
+</div>
 
         <p className="mt-4 text-center text-xs text-slate-500">
           The exact appearance may vary slightly between Outlook,
