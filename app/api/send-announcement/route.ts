@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabase } from "@/lib/supabase";
 import { requireCompanyAccess } from "@/lib/tenant-auth";
+import sanitizeHtml from "sanitize-html";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -248,32 +249,91 @@ const normalizedContent = String(content ?? "")
   .replace(/\t+/g, " ")
   .trim();
 
-const paragraphs = normalizedContent
-  // Blank line = genuine new paragraph
-  .split(/\n\s*\n/)
-  .map((paragraph) =>
-    paragraph
-      // Any newline remaining inside a paragraph is NOT
-      // a deliberate email line break. Convert it to a space.
-      .replace(/\s*\n+\s*/g, " ")
-      // Collapse repeated spaces
-      .replace(/ {2,}/g, " ")
-      .trim()
-  )
-  .filter(Boolean)
-  .map(
-    (paragraph) =>
-      `<p style="
-        margin:0 0 18px 0;
-        padding:0;
-        font-family:Arial,Helvetica,sans-serif;
-        font-size:16px;
-        line-height:1.7;
-        color:#1e293b;
-        white-space:normal;
-      ">${escapeHtml(paragraph)}</p>`
-  )
-  .join("");
+const sanitizedContent = sanitizeHtml(
+  String(content ?? ""),
+  {
+    allowedTags: [
+      "p",
+      "br",
+      "strong",
+      "b",
+      "em",
+      "i",
+      "u",
+      "ul",
+      "ol",
+      "li",
+      "a",
+    ],
+
+allowedAttributes: {
+  p: ["style"],
+  ul: ["style"],
+  ol: ["style"],
+  li: ["style"],
+  a: [
+    "href",
+    "target",
+    "rel",
+    "style",
+  ],
+},
+
+    allowedSchemes: [
+      "http",
+      "https",
+      "mailto",
+    ],
+
+transformTags: {
+  p: () => ({
+    tagName: "p",
+    attribs: {
+      style:
+        "margin:0 0 18px 0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1e293b;",
+    },
+  }),
+
+  ul: () => ({
+    tagName: "ul",
+    attribs: {
+      style:
+        "margin:0 0 20px 0;padding-left:28px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1e293b;",
+    },
+  }),
+
+  ol: () => ({
+    tagName: "ol",
+    attribs: {
+      style:
+        "margin:0 0 20px 0;padding-left:28px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1e293b;",
+    },
+  }),
+
+  li: () => ({
+    tagName: "li",
+    attribs: {
+      style:
+        "margin:0 0 8px 0;padding-left:4px;",
+    },
+  }),
+
+  a: (
+    tagName,
+    attribs
+  ) => ({
+    tagName,
+    attribs: {
+      ...attribs,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      style:
+        "color:#1E2D5A;text-decoration:underline;",
+    },
+  }),
+},
+  }
+);
 
   const primaryColour =
     company?.primary_colour || "#1E2D5A";
@@ -352,15 +412,16 @@ const paragraphs = normalizedContent
                   : ""
               }
 
-<div style="
-  width:100%;
-  font-family:Arial,Helvetica,sans-serif;
-  font-size:16px;
-  line-height:1.7;
-  color:#1e293b;
-  white-space:normal;
-">
-  ${paragraphs}
+<div
+  style="
+    width:100%;
+    font-family:Arial,Helvetica,sans-serif;
+    font-size:16px;
+    line-height:1.7;
+    color:#1e293b;
+  "
+>
+  ${sanitizedContent}
 </div>
 
               ${

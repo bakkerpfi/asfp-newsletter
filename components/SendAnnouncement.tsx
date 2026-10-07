@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import RichEmailEditor from "@/components/RichEmailEditor";
 
 type Props = {
   subscriberCount: number;
@@ -486,12 +487,6 @@ export default function SendAnnouncement({
     }
   }
 
-  const paragraphs = content
-    .split(/\n\s*\n/)
-    .filter((paragraph) =>
-      paragraph.trim()
-    );
-
   return (
     <div className="mt-8">
 
@@ -568,22 +563,16 @@ export default function SendAnnouncement({
               Announcement Content
             </label>
 
-            <textarea
-              value={content}
-              onChange={(e) =>
-                setContent(
-                  e.target.value
-                )
-              }
-              rows={16}
-              disabled={campaignId !== null}
-              className="mt-2 w-full rounded border bg-white p-3 disabled:cursor-not-allowed disabled:bg-slate-100"
-            />
+<RichEmailEditor
+  value={content}
+  onChange={setContent}
+  disabled={campaignId !== null}
+/>
 
             <p className="mt-2 text-sm text-slate-500">
               {campaignId
                 ? "This content is locked because an unfinished campaign is being recovered."
-                : "Separate paragraphs with a blank line."}
+                : "Use the formatting toolbar to add emphasis, lists and links."}
             </p>
           </div>
 
@@ -718,29 +707,31 @@ export default function SendAnnouncement({
                   </h1>
                 )}
 
-                <div className="text-base leading-7 text-slate-700">
+{content ? (
+  <div
+    className="
+      text-base leading-7 text-slate-700
+      [&_p]:mb-5
+      [&_ul]:mb-5
+      [&_ul]:list-disc
+      [&_ul]:pl-7
+      [&_ol]:mb-5
+      [&_ol]:list-decimal
+      [&_ol]:pl-7
+      [&_li]:mb-2
+      [&_a]:text-blue-700
+      [&_a]:underline
+    "
+    dangerouslySetInnerHTML={{
+      __html: content,
+    }}
+  />
+) : (
+  <p className="italic text-slate-400">
+    Your announcement content will appear here.
+  </p>
+)}
 
-                  {paragraphs.length > 0 ? (
-                    paragraphs.map(
-                      (
-                        paragraph,
-                        index
-                      ) => (
-                        <p
-                          key={index}
-                          className="mb-5"
-                        >
-                          {paragraph}
-                        </p>
-                      )
-                    )
-                  ) : (
-                    <p className="italic text-slate-400">
-                      Your announcement content will appear here.
-                    </p>
-                  )}
-
-                </div>
 
                 {buttonText &&
                   buttonLink && (
