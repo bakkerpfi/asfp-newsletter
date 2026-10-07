@@ -1,6 +1,7 @@
 import AdminSidebar from "@/components/AdminSidebar";
 import SendAnnouncement from "@/components/SendAnnouncement";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { supabase as adminSupabase } from "@/lib/supabase";
 import { redirect } from "next/navigation";
 
 type Props = {
@@ -123,8 +124,8 @@ export default async function CreateEmailPage({
     );
   }
 
-  const { data: authorRows, error: authorsError } =
-  await supabase
+const { data: authorRows, error: authorsError } =
+  await adminSupabase
     .from("article_authors")
     .select(
       "id,name,job_title,photo_url,signature_url,active"
