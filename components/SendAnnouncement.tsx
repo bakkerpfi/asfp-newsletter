@@ -129,6 +129,70 @@ const selectedAuthor =
       author.id === selectedAuthorId
   ) ?? null;
 
+  const [uploadingSignature, setUploadingSignature] =
+  useState(false);
+
+async function uploadSignature(
+  file: File
+) {
+  if (!selectedAuthor) {
+    alert("Please select an author first.");
+    return;
+  }
+
+  setUploadingSignature(true);
+
+  try {
+    const form = new FormData();
+
+    form.append(
+      "companySlug",
+      companySlug
+    );
+
+    form.append(
+      "authorId",
+      selectedAuthor.id
+    );
+
+    form.append(
+      "signature",
+      file
+    );
+
+    const response = await fetch(
+      "/api/article-authors/signature",
+      {
+        method: "POST",
+        body: form,
+      }
+    );
+
+    const result =
+      await response.json();
+
+    if (
+      !response.ok ||
+      !result.success
+    ) {
+      throw new Error(
+        result.error ||
+          "Unable to upload signature."
+      );
+    }
+
+    window.location.reload();
+  } catch (error) {
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Unable to upload signature."
+    );
+  } finally {
+    setUploadingSignature(false);
+  }
+}
+
   const [buttonText, setButtonText] = useState("");
 
   const [buttonLink, setButtonLink] = useState("");
@@ -259,17 +323,22 @@ const selectedAuthor =
             "Content-Type":
               "application/json",
           },
-          body: JSON.stringify({
-            companySlug,
-            subject,
-            heading,
-            content,
-            buttonText,
-            buttonLink,
-            proofEmail:
-              proofEmail.trim(),
-            sendToAll: false,
-          }),
+body: JSON.stringify({
+  companySlug,
+  subject,
+  heading,
+  content,
+  buttonText,
+  buttonLink,
+  includeSignature,
+  authorId:
+    includeSignature
+      ? selectedAuthorId
+      : null,
+  proofEmail:
+    proofEmail.trim(),
+  sendToAll: false,
+}),
         }
       );
 
@@ -395,16 +464,21 @@ const selectedAuthor =
             "Content-Type":
               "application/json",
           },
-          body: JSON.stringify({
-            companySlug,
-            subject,
-            heading,
-            content,
-            buttonText,
-            buttonLink,
-            sendToAll: true,
-            campaignId,
-          }),
+body: JSON.stringify({
+  companySlug,
+  subject,
+  heading,
+  content,
+  buttonText,
+  buttonLink,
+  includeSignature,
+  authorId:
+    includeSignature
+      ? selectedAuthorId
+      : null,
+  sendToAll: true,
+  campaignId,
+}),
         }
       );
 
@@ -707,6 +781,37 @@ const selectedAuthor =
             Sign-off Preview
           </p>
 
+          <div className="mb-5">
+  <label className="inline-flex cursor-pointer items-center rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">
+    {uploadingSignature
+      ? "Uploading..."
+      : selectedAuthor.signature_url
+        ? "Replace Signature"
+        : "Upload Signature"}
+
+    <input
+      type="file"
+      accept="image/png,image/jpeg,image/webp"
+      disabled={uploadingSignature}
+      className="hidden"
+      onChange={(e) => {
+        const file =
+          e.target.files?.[0];
+
+        if (file) {
+          uploadSignature(file);
+        }
+
+        e.currentTarget.value = "";
+      }}
+    />
+  </label>
+
+  <p className="mt-2 text-xs text-slate-500">
+    PNG with a transparent background is recommended.
+  </p>
+</div>
+
           {selectedAuthor.signature_url ? (
             <img
               src={
@@ -874,6 +979,32 @@ const selectedAuthor =
   <p className="italic text-slate-400">
     Your announcement content will appear here.
   </p>
+)}
+
+{includeSignature && selectedAuthor && (
+  <div className="mt-8">
+    {selectedAuthor.signature_url && (
+      <img
+        src={selectedAuthor.signature_url}
+        alt={`${selectedAuthor.name} signature`}
+        className="mb-3 max-h-20 max-w-[220px] object-contain"
+      />
+    )}
+
+    <p className="font-bold text-slate-800">
+      {selectedAuthor.name}
+    </p>
+
+    {selectedAuthor.job_title && (
+      <p className="text-sm text-slate-600">
+        {selectedAuthor.job_title}
+      </p>
+    )}
+
+    <p className="text-sm text-slate-600">
+      {companyName}
+    </p>
+  </div>
 )}
 
 

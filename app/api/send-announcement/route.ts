@@ -216,6 +216,7 @@ function createEmailHtml({
   content,
   buttonText,
   buttonLink,
+  author,
 }: {
   subscriber: Subscriber;
   company?: Company;
@@ -223,6 +224,12 @@ function createEmailHtml({
   content: string;
   buttonText?: string;
   buttonLink?: string;
+  author?: {
+    id: string;
+    name: string;
+    job_title: string | null;
+    signature_url: string | null;
+  } | null;
 }) {
   const unsubscribeUrl =
     `${WEBSITE_URL}/unsubscribe/` +
@@ -344,6 +351,68 @@ transformTags: {
   const companyName =
     company?.name || "ASFP Australia & New Zealand";
 
+    const signOffHtml = author
+  ? `
+      <div style="
+        margin-top:32px;
+        font-family:Arial,Helvetica,sans-serif;
+        color:#1e293b;
+      ">
+        ${
+          author.signature_url
+            ? `
+              <img
+                src="${escapeHtml(author.signature_url)}"
+                alt="${escapeHtml(author.name)} signature"
+                style="
+                  display:block;
+                  max-width:220px;
+                  max-height:80px;
+                  width:auto;
+                  height:auto;
+                  margin:0 0 10px 0;
+                "
+              />
+            `
+            : ""
+        }
+
+        <p style="
+          margin:0;
+          font-size:16px;
+          line-height:1.5;
+          font-weight:bold;
+        ">
+          ${escapeHtml(author.name)}
+        </p>
+
+        ${
+          author.job_title
+            ? `
+              <p style="
+                margin:2px 0 0 0;
+                font-size:14px;
+                line-height:1.5;
+                color:#475569;
+              ">
+                ${escapeHtml(author.job_title)}
+              </p>
+            `
+            : ""
+        }
+
+        <p style="
+          margin:2px 0 0 0;
+          font-size:14px;
+          line-height:1.5;
+          color:#475569;
+        ">
+          ${escapeHtml(companyName)}
+        </p>
+      </div>
+    `
+  : "";
+
   const logoHtml =
     company?.logo_url
       ? `<img src="${escapeHtml(company.logo_url)}" alt="${escapeHtml(companyName)}" style="display:block;max-width:220px;max-height:90px;width:auto;height:auto;margin:0 auto;" />`
@@ -423,6 +492,8 @@ transformTags: {
 >
   ${sanitizedContent}
 </div>
+
+${signOffHtml}
 
               ${
                 buttonText &&
@@ -827,17 +898,19 @@ export async function POST(
     const body =
       await request.json();
 
-    const {
-      subject,
-      heading,
-      content,
-      buttonText,
-      buttonLink,
-      proofEmail,
-      sendToAll,
-      campaignId,
-      companySlug,
-    } = body;
+const {
+  subject,
+  heading,
+  content,
+  buttonText,
+  buttonLink,
+  proofEmail,
+  sendToAll,
+  campaignId,
+  companySlug,
+  includeSignature,
+  authorId,
+} = body;
 
     const tenant =
       await requireCompanyAccess(
@@ -869,6 +942,59 @@ export async function POST(
         { status: 404 }
       );
     }
+
+    let emailAuthor: {
+  id: string;
+  name: string;
+  job_title: string | null;
+  signature_url: string | null;
+} | null = null;
+
+if (includeSignature) {
+  const cleanAuthorId =
+    String(authorId ?? "").trim();
+
+  if (!cleanAuthorId) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Please select an author for the email sign-off.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const {
+    data: author,
+    error: authorError,
+  } = await supabase
+    .from("article_authors")
+    .select(
+      "id,name,job_title,signature_url"
+    )
+    .eq("id", cleanAuthorId)
+    .eq("company_id", companyId)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (authorError) {
+    throw authorError;
+  }
+
+  if (!author) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "The selected email author could not be found for this company.",
+      },
+      { status: 404 }
+    );
+  }
+
+  emailAuthor = author;
+}
 
     const companyFromEmail =
       company.sender_email
@@ -1006,15 +1132,16 @@ const matches =
       const subscriber =
         matches[0] as Subscriber;
 
-      const html =
-        createEmailHtml({
-          subscriber,
-          company,
-          heading,
-          content,
-          buttonText,
-          buttonLink,
-        });
+const html =
+  createEmailHtml({
+    subscriber,
+    company,
+    heading,
+    content,
+    buttonText,
+    buttonLink,
+    author: emailAuthor,
+  });
 
       const {
         data,
@@ -1554,7 +1681,7 @@ const matches =
                   item.subscriber,
 
                 company,
-
+author: emailAuthor,
                 heading:
                   campaignContent
                     .heading,
