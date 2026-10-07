@@ -1878,7 +1878,7 @@ if (
                   item.subscriber,
 
                 company,
-author: emailAuthor,
+author: campaignAuthor,
                 heading:
                   campaignContent
                     .heading,
