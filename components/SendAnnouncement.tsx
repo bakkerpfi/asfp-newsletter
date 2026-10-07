@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import RichEmailEditor from "@/components/RichEmailEditor";
 
+type EmailAuthor = {
+  id: string;
+  name: string;
+  job_title: string | null;
+  photo_url: string | null;
+  signature_url: string | null;
+  active: boolean;
+};
 type Props = {
   subscriberCount: number;
   companySlug: string;
@@ -17,6 +25,7 @@ type Props = {
   footerShowAddress: boolean;
   footerShowPhone: boolean;
   footerShowWebsite: boolean;
+  authors: EmailAuthor[];
 };
 
 type FailedBatch = {
@@ -100,12 +109,25 @@ export default function SendAnnouncement({
   footerShowAddress,
   footerShowPhone,
   footerShowWebsite,
+  authors,
 }: Props) {
   const [subject, setSubject] = useState("");
 
   const [heading, setHeading] = useState("");
 
   const [content, setContent] = useState("");
+
+  const [includeSignature, setIncludeSignature] =
+  useState(false);
+
+const [selectedAuthorId, setSelectedAuthorId] =
+  useState("");
+
+const selectedAuthor =
+  authors.find(
+    (author) =>
+      author.id === selectedAuthorId
+  ) ?? null;
 
   const [buttonText, setButtonText] = useState("");
 
@@ -595,6 +617,128 @@ export default function SendAnnouncement({
                 className="mt-2 w-full rounded border bg-white p-3 disabled:cursor-not-allowed disabled:bg-slate-100"
               />
             </div>
+
+            {/* EMAIL SIGN-OFF */}
+
+<div className="rounded-xl border border-slate-200 bg-white p-5">
+  <div className="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h3 className="font-bold text-slate-800">
+        Email Sign-off
+      </h3>
+
+      <p className="mt-1 text-sm text-slate-500">
+        Add a company author and signature beneath the email content.
+      </p>
+    </div>
+
+    <label className="flex items-center gap-3 font-semibold text-slate-700">
+      <input
+        type="checkbox"
+        checked={includeSignature}
+        onChange={(e) => {
+          const checked = e.target.checked;
+
+          setIncludeSignature(checked);
+
+          if (
+            checked &&
+            !selectedAuthorId &&
+            authors.length > 0
+          ) {
+            setSelectedAuthorId(
+              authors[0].id
+            );
+          }
+        }}
+        disabled={
+          campaignId !== null ||
+          authors.length === 0
+        }
+        className="h-5 w-5"
+      />
+
+      Include sign-off
+    </label>
+  </div>
+
+  {authors.length === 0 && (
+    <div className="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
+      No active authors are available for this company.
+    </div>
+  )}
+
+  {includeSignature && (
+    <div className="mt-5">
+      <label className="font-semibold text-slate-700">
+        Signed by
+      </label>
+
+      <select
+        value={selectedAuthorId}
+        onChange={(e) =>
+          setSelectedAuthorId(
+            e.target.value
+          )
+        }
+        disabled={campaignId !== null}
+        className="mt-2 w-full rounded border border-slate-300 bg-white p-3"
+      >
+        <option value="">
+          Select an author
+        </option>
+
+        {authors.map((author) => (
+          <option
+            key={author.id}
+            value={author.id}
+          >
+            {author.name}
+            {author.job_title
+              ? ` — ${author.job_title}`
+              : ""}
+          </option>
+        ))}
+      </select>
+
+      {selectedAuthor && (
+        <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-5">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Sign-off Preview
+          </p>
+
+          {selectedAuthor.signature_url ? (
+            <img
+              src={
+                selectedAuthor.signature_url
+              }
+              alt={`${selectedAuthor.name} signature`}
+              className="mb-3 max-h-20 max-w-[220px] object-contain"
+            />
+          ) : (
+            <div className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+              No handwritten signature has been uploaded for this author yet.
+            </div>
+          )}
+
+          <p className="font-bold text-slate-800">
+            {selectedAuthor.name}
+          </p>
+
+          {selectedAuthor.job_title && (
+            <p className="mt-1 text-sm text-slate-600">
+              {selectedAuthor.job_title}
+            </p>
+          )}
+
+          <p className="mt-1 text-sm text-slate-600">
+            {companyName}
+          </p>
+        </div>
+      )}
+    </div>
+  )}
+</div>
 
             <div>
               <label className="font-semibold text-slate-700">

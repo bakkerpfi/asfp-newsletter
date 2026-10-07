@@ -123,6 +123,27 @@ export default async function CreateEmailPage({
     );
   }
 
+  const { data: authorRows, error: authorsError } =
+  await supabase
+    .from("article_authors")
+    .select(
+      "id,name,job_title,photo_url,signature_url,active"
+    )
+    .eq("company_id", currentCompany.id)
+    .eq("active", true)
+    .order("name", {
+      ascending: true,
+    });
+
+if (authorsError) {
+  console.error(
+    "EMAIL AUTHORS ERROR:",
+    authorsError
+  );
+}
+
+const authors = authorRows ?? [];
+
   return (
     <div className="flex">
       <AdminSidebar
@@ -183,6 +204,7 @@ export default async function CreateEmailPage({
           footerShowAddress={currentCompany.footer_show_address}
           footerShowPhone={currentCompany.footer_show_phone}
           footerShowWebsite={currentCompany.footer_show_website}
+          authors={authors}
         />
       </main>
     </div>
