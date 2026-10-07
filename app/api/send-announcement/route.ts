@@ -217,6 +217,7 @@ export function createEmailHtml({
   buttonText,
   buttonLink,
   author,
+  proofApprovalHtml,
 }: {
   subscriber: Subscriber;
   company?: Company;
@@ -230,6 +231,7 @@ export function createEmailHtml({
     job_title: string | null;
     signature_url: string | null;
   } | null;
+  proofApprovalHtml?: string;
 }) {
   const unsubscribeUrl =
     `${WEBSITE_URL}/unsubscribe/` +
@@ -522,6 +524,8 @@ ${signOffHtml}
                   : ""
               }
 
+              ${proofApprovalHtml || ""}
+
             </div>
 
             <div style="
@@ -813,17 +817,19 @@ async function loadCampaign(
     .from(
       "announcement_campaigns"
     )
-    .select(
-      `
-      id,
-      subject,
-      heading,
-      content,
-      button_text,
-      button_link,
-      status
-      `
-    )
+.select(
+  `
+  id,
+  subject,
+  heading,
+  content,
+  button_text,
+  button_link,
+  status,
+  author_id,
+  include_signature
+  `
+)
     .eq(
       "company_id",
       companyId
@@ -910,6 +916,7 @@ const {
   companySlug,
   includeSignature,
   authorId,
+  proofCampaignId,
 } = body;
 
     const tenant =
@@ -995,6 +1002,7 @@ if (includeSignature) {
 
   emailAuthor = author;
 }
+let campaignAuthor = emailAuthor;
 
     const companyFromEmail =
       company.sender_email
@@ -1132,6 +1140,89 @@ const matches =
       const subscriber =
         matches[0] as Subscriber;
 
+        let proofApprovalHtml = "";
+
+if (proofCampaignId) {
+  const {
+    data: proofCampaign,
+    error: proofCampaignError,
+  } = await supabase
+    .from("announcement_campaigns")
+    .select("id,approval_token")
+    .eq("id", Number(proofCampaignId))
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  if (proofCampaignError) {
+    throw proofCampaignError;
+  }
+
+  if (!proofCampaign) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "The saved proof campaign could not be found.",
+      },
+      { status: 404 }
+    );
+  }
+
+  const approvalUrl =
+    `${WEBSITE_URL}/approve-email/` +
+    encodeURIComponent(
+      proofCampaign.approval_token
+    );
+
+  proofApprovalHtml = `
+    <div style="
+      margin-top:35px;
+      padding:24px;
+      border:2px solid #16a34a;
+      border-radius:8px;
+      background:#f0fdf4;
+      text-align:center;
+      font-family:Arial,Helvetica,sans-serif;
+    ">
+      <p style="
+        margin:0 0 8px 0;
+        font-size:16px;
+        font-weight:bold;
+        color:#166534;
+      ">
+        EMAIL PROOF — APPROVAL REQUIRED
+      </p>
+
+      <p style="
+        margin:0 0 18px 0;
+        font-size:14px;
+        line-height:1.5;
+        color:#475569;
+      ">
+        Please review the email above carefully.
+        If this version is approved for distribution,
+        continue using the button below.
+      </p>
+
+      <a
+        href="${escapeHtml(approvalUrl)}"
+        style="
+          display:inline-block;
+          padding:13px 22px;
+          border-radius:6px;
+          background:#16a34a;
+          color:#ffffff;
+          text-decoration:none;
+          font-size:15px;
+          font-weight:bold;
+        "
+      >
+        Review &amp; Approve Email
+      </a>
+    </div>
+  `;
+}
+
 const html =
   createEmailHtml({
     subscriber,
@@ -1141,6 +1232,7 @@ const html =
     buttonText,
     buttonLink,
     author: emailAuthor,
+    proofApprovalHtml,
   });
 
       const {
@@ -1182,6 +1274,33 @@ const html =
           }
         );
       }
+
+      if (proofCampaignId) {
+  const { error: proofUpdateError } =
+    await supabase
+      .from("announcement_campaigns")
+      .update({
+        status: "proof_sent",
+        proof_sent_at:
+          new Date().toISOString(),
+        proof_email:
+          cleanProofEmail,
+        updated_at:
+          new Date().toISOString(),
+      })
+      .eq(
+        "id",
+        Number(proofCampaignId)
+      )
+      .eq(
+        "company_id",
+        companyId
+      );
+
+  if (proofUpdateError) {
+    throw proofUpdateError;
+  }
+}
 
       return NextResponse.json({
         success: true,
@@ -1227,31 +1346,109 @@ const html =
         );
       }
 
-      const storedCampaign =
-        await loadCampaign(
-          companyId,
-          currentCampaignId
-        );
+const storedCampaign =
+  await loadCampaign(
+    companyId,
+    currentCampaignId
+  );
 
-      if (
-        storedCampaign
-          .status ===
-        "completed"
-      ) {
-        return NextResponse.json(
-          {
-            success: true,
-            complete: true,
-            campaignId:
-              currentCampaignId,
-            message:
-              "This campaign is already completed.",
-            sent: 0,
-            failed: 0,
-            remaining: 0,
-          }
-        );
-      }
+// -----------------------------------------
+// CAMPAIGN APPROVAL CHECK
+// -----------------------------------------
+
+if (
+  storedCampaign.status ===
+  "proof_sent"
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      error:
+        "This email is still awaiting proof approval.",
+    },
+    { status: 409 }
+  );
+}
+
+if (
+  storedCampaign.status ===
+  "completed"
+) {
+  return NextResponse.json(
+    {
+      success: true,
+      complete: true,
+      campaignId:
+        currentCampaignId,
+      message:
+        "This campaign is already completed.",
+      sent: 0,
+      failed: 0,
+      remaining: 0,
+    }
+  );
+}
+
+if (
+  ![
+    "approved",
+    "sending",
+    "partial",
+  ].includes(
+    storedCampaign.status
+  )
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      error:
+        "This campaign is not approved for sending.",
+    },
+    { status: 409 }
+  );
+}
+
+// -----------------------------------------
+// LOAD THE AUTHOR SAVED WITH THIS CAMPAIGN
+// -----------------------------------------
+
+campaignAuthor = null;
+
+if (
+  storedCampaign.include_signature &&
+  storedCampaign.author_id
+) {
+  const {
+    data: storedAuthor,
+    error: storedAuthorError,
+  } = await supabase
+    .from("article_authors")
+    .select(
+      "id,name,job_title,signature_url"
+    )
+    .eq(
+      "id",
+      storedCampaign.author_id
+    )
+    .eq(
+      "company_id",
+      companyId
+    )
+    .maybeSingle();
+
+  if (storedAuthorError) {
+    throw storedAuthorError;
+  }
+
+  if (!storedAuthor) {
+    throw new Error(
+      "The author saved with this approved campaign could not be found."
+    );
+  }
+
+  campaignAuthor =
+    storedAuthor;
+}
 
       campaignContent = {
         subject:

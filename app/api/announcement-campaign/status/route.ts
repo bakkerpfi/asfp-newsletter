@@ -20,14 +20,16 @@ export async function GET(request: NextRequest) {
       error: campaignError,
     } = await supabase
       .from("announcement_campaigns")
-      .select(
-        "id,subject,heading,content,button_text,button_link,status,created_at,started_at,completed_at"
-      )
+.select(
+  "id,subject,heading,content,button_text,button_link,status,created_at,started_at,completed_at,author_id,include_signature,proof_email,proof_sent_at,approved_at,approved_by_name,approved_by_email"
+)
       .eq("company_id", companyId)
-      .in("status", [
-        "sending",
-        "partial",
-      ])
+.in("status", [
+  "proof_sent",
+  "approved",
+  "sending",
+  "partial",
+])
       .order("id", {
         ascending: false,
       })
@@ -140,7 +142,13 @@ export async function GET(request: NextRequest) {
         0
       );
 
-    if (remaining === 0) {
+    if (
+  remaining === 0 &&
+  (
+    campaign.status === "sending" ||
+    campaign.status === "partial"
+  )
+) {
       await supabase
         .from("announcement_campaigns")
         .update({
@@ -174,6 +182,26 @@ export async function GET(request: NextRequest) {
           campaign.button_link,
         status:
           campaign.status,
+          authorId:
+  campaign.author_id,
+
+includeSignature:
+  campaign.include_signature,
+
+proofEmail:
+  campaign.proof_email,
+
+proofSentAt:
+  campaign.proof_sent_at,
+
+approvedAt:
+  campaign.approved_at,
+
+approvedByName:
+  campaign.approved_by_name,
+
+approvedByEmail:
+  campaign.approved_by_email,
         createdAt:
           campaign.created_at,
         startedAt:

@@ -208,6 +208,27 @@ async function uploadSignature(
   const [campaignId, setCampaignId] =
     useState<number | null>(null);
 
+    const [proofCampaignId, setProofCampaignId] =
+  useState<number | null>(null);
+
+const [proofStatus, setProofStatus] =
+  useState<string | null>(null);
+
+const [proofSentTo, setProofSentTo] =
+  useState<string | null>(null);
+
+const [proofSentAt, setProofSentAt] =
+  useState<string | null>(null);
+
+const [approvedAt, setApprovedAt] =
+  useState<string | null>(null);
+
+const [approvedByName, setApprovedByName] =
+  useState<string | null>(null);
+
+const [approvedByEmail, setApprovedByEmail] =
+  useState<string | null>(null);
+
   const [campaignResult, setCampaignResult] =
     useState<CampaignResult | null>(null);
 
@@ -330,6 +351,75 @@ const [emailPreviewLoading, setEmailPreviewLoading] =
 
         const remaining =
           Number(campaign.remaining) || 0;
+          if (
+  campaign.status === "proof_sent" ||
+  campaign.status === "approved"
+) {
+  setProofCampaignId(
+    Number(campaign.id)
+  );
+
+  setProofStatus(
+    campaign.status
+  );
+
+  setProofSentTo(
+    campaign.proofEmail ?? null
+  );
+
+  setProofSentAt(
+    campaign.proofSentAt ?? null
+  );
+
+  setApprovedAt(
+    campaign.approvedAt ?? null
+  );
+
+  setApprovedByName(
+    campaign.approvedByName ?? null
+  );
+
+  setApprovedByEmail(
+    campaign.approvedByEmail ?? null
+  );
+
+  // Restore the exact saved proof.
+  setSubject(
+    campaign.subject || ""
+  );
+
+  setHeading(
+    campaign.heading || ""
+  );
+
+  setContent(
+    campaign.content || ""
+  );
+
+  setButtonText(
+    campaign.buttonText || ""
+  );
+
+  setButtonLink(
+    campaign.buttonLink || ""
+  );
+
+  setIncludeSignature(
+    Boolean(
+      campaign.includeSignature
+    )
+  );
+
+  setSelectedAuthorId(
+    campaign.authorId || ""
+  );
+
+  // This is NOT an interrupted bulk campaign.
+  setCampaignId(null);
+  setCampaignResult(null);
+
+  return;
+}
 
         if (
           campaign.status === "completed" ||
@@ -377,6 +467,91 @@ const [emailPreviewLoading, setEmailPreviewLoading] =
     checkForIncompleteCampaign();
   }, [companySlug]);
 
+  useEffect(() => {
+  if (
+    !proofCampaignId ||
+    proofStatus === "approved"
+  ) {
+    return;
+  }
+
+  const interval =
+    window.setInterval(
+      async () => {
+        try {
+          const response = await fetch(
+            `/api/announcement-campaign/status?company=${encodeURIComponent(
+              companySlug
+            )}`,
+            {
+              cache: "no-store",
+            }
+          );
+
+          const result =
+            await response.json();
+
+          if (
+            !response.ok ||
+            !result.success ||
+            !result.campaign
+          ) {
+            return;
+          }
+
+          const campaign =
+            result.campaign;
+
+          if (
+            Number(campaign.id) !==
+            proofCampaignId
+          ) {
+            return;
+          }
+
+          if (
+            campaign.status ===
+            "approved"
+          ) {
+            setProofStatus(
+              "approved"
+            );
+
+            setApprovedAt(
+              campaign.approvedAt ??
+                null
+            );
+
+            setApprovedByName(
+              campaign.approvedByName ??
+                null
+            );
+
+            setApprovedByEmail(
+              campaign.approvedByEmail ??
+                null
+            );
+          }
+        } catch (error) {
+          console.error(
+            "Unable to refresh proof approval:",
+            error
+          );
+        }
+      },
+      10000
+    );
+
+  return () =>
+    window.clearInterval(
+      interval
+    );
+}, [
+  companySlug,
+  proofCampaignId,
+  proofStatus,
+]);
+
   // -----------------------------------------
   // SEND PROOF
   // -----------------------------------------
@@ -391,51 +566,119 @@ const [emailPreviewLoading, setEmailPreviewLoading] =
 
     setSendingProof(true);
 
-    try {
-      const response = await fetch(
-        "/api/send-announcement",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-body: JSON.stringify({
-  companySlug,
-  subject,
-  heading,
-  content,
-  buttonText,
-  buttonLink,
-  includeSignature,
-  authorId:
-    includeSignature
-      ? selectedAuthorId
-      : null,
-  proofEmail:
-    proofEmail.trim(),
-  sendToAll: false,
-}),
-        }
-      );
+try {
+  // -----------------------------------------
+  // SAVE THE EXACT PROOF VERSION FIRST
+  // -----------------------------------------
 
-      const result =
-        await response.json();
+  const saveResponse = await fetch(
+    "/api/announcement-proof",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        companySlug,
+        subject,
+        heading,
+        content,
+        buttonText,
+        buttonLink,
+        includeSignature,
+        authorId:
+          includeSignature
+            ? selectedAuthorId
+            : null,
+        proofEmail:
+          proofEmail.trim(),
+      }),
+    }
+  );
 
-      if (
-        !response.ok ||
-        !result.success
-      ) {
-        alert(
-          result.error ||
-            "Failed to send proof email."
-        );
-        return;
-      }
+  const savedProof =
+    await saveResponse.json();
 
-      alert(
-        `Proof email sent successfully to ${proofEmail}.`
-      );
+  if (
+    !saveResponse.ok ||
+    !savedProof.success
+  ) {
+    alert(
+      savedProof.error ||
+        "Unable to save the proof."
+    );
+    return;
+  }
+
+  // -----------------------------------------
+  // SEND THE SAVED PROOF
+  // -----------------------------------------
+
+  const response = await fetch(
+    "/api/send-announcement",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify({
+        companySlug,
+        subject,
+        heading,
+        content,
+        buttonText,
+        buttonLink,
+        includeSignature,
+        authorId:
+          includeSignature
+            ? selectedAuthorId
+            : null,
+        proofEmail:
+          proofEmail.trim(),
+        proofCampaignId:
+          savedProof.campaignId,
+        sendToAll: false,
+      }),
+    }
+  );
+
+  const result =
+    await response.json();
+
+  if (
+    !response.ok ||
+    !result.success
+  ) {
+    alert(
+      result.error ||
+        "Failed to send proof email."
+    );
+    return;
+  }
+
+  setProofCampaignId(
+  Number(savedProof.campaignId)
+);
+
+setProofStatus("proof_sent");
+
+setProofSentTo(
+  proofEmail.trim()
+);
+
+setProofSentAt(
+  new Date().toISOString()
+);
+
+setApprovedAt(null);
+setApprovedByName(null);
+setApprovedByEmail(null);
+
+  alert(
+    `Proof email sent successfully to ${proofEmail}.\n\n` +
+      `Campaign #${savedProof.campaignId} has been saved and is awaiting approval.`
+  );
     } catch (error) {
       console.error(error);
 
@@ -554,7 +797,10 @@ body: JSON.stringify({
       ? selectedAuthorId
       : null,
   sendToAll: true,
-  campaignId,
+
+  campaignId:
+    campaignId ??
+    proofCampaignId,
 }),
         }
       );
@@ -1059,6 +1305,95 @@ body: JSON.stringify({
 
       </div>
 
+      {/* PROOF APPROVAL STATUS */}
+
+{proofCampaignId && (
+  <div
+    className={`mt-8 rounded-xl border p-6 shadow ${
+      proofStatus === "approved"
+        ? "border-green-200 bg-green-50"
+        : "border-amber-200 bg-amber-50"
+    }`}
+  >
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h3 className="text-xl font-bold text-slate-900">
+          Proof & Approval
+        </h3>
+
+        <p className="mt-1 text-sm text-slate-600">
+          Campaign #{proofCampaignId}
+        </p>
+      </div>
+
+      <span
+        className={`rounded-full px-4 py-2 text-sm font-bold ${
+          proofStatus === "approved"
+            ? "bg-green-200 text-green-800"
+            : "bg-amber-200 text-amber-800"
+        }`}
+      >
+        {proofStatus === "approved"
+          ? "Approved for Send"
+          : "Awaiting Approval"}
+      </span>
+    </div>
+
+    <div className="mt-5 rounded-lg bg-white p-5">
+      {proofSentTo && (
+        <p className="text-sm text-slate-700">
+          <strong>Proof sent to:</strong>{" "}
+          {proofSentTo}
+        </p>
+      )}
+
+      {proofSentAt && (
+        <p className="mt-2 text-sm text-slate-700">
+          <strong>Proof sent:</strong>{" "}
+          {new Date(
+            proofSentAt
+          ).toLocaleString()}
+        </p>
+      )}
+
+      {proofStatus === "approved" ? (
+        <>
+          {approvedByName && (
+            <p className="mt-2 text-sm text-slate-700">
+              <strong>Approved by:</strong>{" "}
+              {approvedByName}
+            </p>
+          )}
+
+          {approvedByEmail && (
+            <p className="mt-2 text-sm text-slate-700">
+              <strong>Approver email:</strong>{" "}
+              {approvedByEmail}
+            </p>
+          )}
+
+          {approvedAt && (
+            <p className="mt-2 text-sm text-slate-700">
+              <strong>Approved:</strong>{" "}
+              {new Date(
+                approvedAt
+              ).toLocaleString()}
+            </p>
+          )}
+
+          <div className="mt-5 rounded-lg bg-green-100 p-4 font-semibold text-green-800">
+            ✓ This proof is approved and ready for distribution.
+          </div>
+        </>
+      ) : (
+        <div className="mt-5 rounded-lg bg-amber-100 p-4 text-amber-900">
+          Waiting for the proof recipient to review and approve the email.
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
       {/* CAMPAIGN RESULT */}
 
       {campaignResult && (
@@ -1290,13 +1625,20 @@ body: JSON.stringify({
         <button
           type="button"
           onClick={sendToAll}
-          disabled={
-            checkingCampaign ||
-            sendingProof ||
-            sendingAll ||
-            campaignResult?.complete === true ||
-            (campaignId === null && !audiencePreview)
-          }
+disabled={
+  checkingCampaign ||
+  sendingProof ||
+  sendingAll ||
+  campaignResult?.complete === true ||
+  (
+    campaignId === null &&
+    (
+      !audiencePreview ||
+      proofStatus !== "approved" ||
+      !proofCampaignId
+    )
+  )
+}
           className="mt-5 rounded bg-red-600 px-6 py-3 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {checkingCampaign
