@@ -202,40 +202,26 @@ export async function POST(
     // Both company_id and issue_id are required.
     // -----------------------------------------------------
 
-    const {
-      data: sentRows,
-      error: sentError,
-    } = await supabase
-      .from("newsletter_sends")
-      .select(
-        "subscriber_id"
-      )
-      .eq(
-        "company_id",
-        companyId
-      )
-      .eq(
-        "issue_id",
-        issueId
-      )
-      .eq(
-        "status",
-        "sent"
-      );
+    // Page through the full history, just as the send route does.
+    // An unpaginated query can silently stop at the database row limit.
+    const sentSubscriberIds = new Set<number>();
+    for (let from = 0; ; from += DATABASE_PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from("newsletter_sends")
+        .select("subscriber_id")
+        .eq("company_id", companyId)
+        .eq("issue_id", issueId)
+        .eq("status", "sent")
+        .order("subscriber_id", { ascending: true })
+        .range(from, from + DATABASE_PAGE_SIZE - 1);
 
-    if (sentError) {
-      throw sentError;
+      if (error) throw error;
+      const rows = data ?? [];
+      for (const row of rows) {
+        sentSubscriberIds.add(Number(row.subscriber_id));
+      }
+      if (rows.length < DATABASE_PAGE_SIZE) break;
     }
-
-    const sentSubscriberIds =
-      new Set(
-        (sentRows ?? []).map(
-          (row) =>
-            Number(
-              row.subscriber_id
-            )
-        )
-      );
 
     // -----------------------------------------------------
     // PENDING RECIPIENTS
@@ -291,7 +277,7 @@ export async function POST(
           subscribers.length,
 
         alreadySent:
-          sentSubscriberIds.size,
+          subscribers.length - pendingSubscribers.length,
 
         pending:
           pendingSubscribers.length,
